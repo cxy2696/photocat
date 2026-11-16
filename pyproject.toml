@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "photocat"
-version = "0.1.0"
-description = "Semantic knowledge graph + graph-augmented transformer for photocatalytic materials discovery"
+version = "0.2.0"
+description = "Composition band-gap prediction, small-table HER regression, and a semantic KG toolkit for photocatalytic materials"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -22,7 +22,7 @@ dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
 viz = ["matplotlib>=3.7"]
-dev = ["pytest>=7", "matplotlib>=3.7"]
+dev = ["pytest>=7", "matplotlib>=3.7", "openpyxl>=3.1"]
 
 [project.scripts]
 photocat = "photocat.cli:main"

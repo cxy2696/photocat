@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -135,10 +135,7 @@ def run_pipeline(config: PipelineConfig | None = None, verbose: bool = True) -> 
         holdout_families=config.holdout_families,
     )
     save_materials(run_dir / "materials.csv", bundle.materials)
-    save_materials(run_dir / "anchors.csv", bundle.anchors)
-    corpus = generate_corpus(
-        bundle.materials, bundle.anchors, n=config.n_corpus, seed=config.seed
-    )
+    corpus = generate_corpus(bundle.materials, n=config.n_corpus, seed=config.seed)
     save_corpus(run_dir / "corpus.jsonl", corpus)
     data_summary = summary(bundle.materials)
     data_summary.update(
@@ -148,7 +145,6 @@ def run_pipeline(config: PipelineConfig | None = None, verbose: bool = True) -> 
             "test": len(bundle.test),
             "ood": len(bundle.ood),
             "holdout_families": list(config.holdout_families),
-            "anchors": len(bundle.anchors),
         }
     )
 
@@ -160,11 +156,11 @@ def run_pipeline(config: PipelineConfig | None = None, verbose: bool = True) -> 
         candidate = Path(str(kg_path) + suffix)
         if candidate.exists():
             candidate.unlink()
-    store = build_kg(kg_path, bundle.materials, bundle.anchors)
+    store = build_kg(kg_path, bundle.materials)
     extraction_predictions = [extract(record.text) for record in corpus]
     extraction_metrics = evaluate_extraction(corpus, extraction_predictions)
     material_by_label: dict[str, Any] = {}
-    for material in list(bundle.materials) + list(bundle.anchors):
+    for material in bundle.materials:
         material_by_label.setdefault(material.label, material)
     extraction_metrics["linking"] = load_extractions(store, corpus, material_by_label)
 
@@ -180,7 +176,7 @@ def run_pipeline(config: PipelineConfig | None = None, verbose: bool = True) -> 
         )
 
     train_fingerprints = fingerprint_matrix(bundle.train)
-    all_materials = list(bundle.materials) + list(bundle.anchors)
+    all_materials = list(bundle.materials)
     all_fingerprints = fingerprint_matrix(all_materials)
     similarity, _ = max_similarity(all_fingerprints, train_fingerprints)
     similarity_map = {
@@ -272,14 +268,13 @@ def run_pipeline(config: PipelineConfig | None = None, verbose: bool = True) -> 
 
     # ------------------------------------------------------------ 5. evaluation
     if verbose:
-        print("[5/9] evaluating in-distribution, family holdout and anchors ...", flush=True)
+        print("[5/9] evaluating in-distribution and family holdout ...", flush=True)
     conformal = fit_conformal(results, featurizer, bundle.val)
     splits = {
         "train": bundle.train,
         "val": bundle.val,
         "test": bundle.test,
         "ood": bundle.ood,
-        "anchors": bundle.anchors,
     }
     evaluations = evaluate_run(results, featurizer, splits, conformal=conformal)
     prediction_rows = evaluations.pop("predictions")

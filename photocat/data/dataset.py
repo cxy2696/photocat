@@ -40,6 +40,7 @@ CONTEXT_FIELDS: tuple[str, ...] = (
     "dopant",
     "ph_bucket",
     "heterojunction",
+    "sacrificial_agent",
 )
 
 ROLE_IDS: dict[str, int] = {"cation": 1, "anion": 2, "dopant": 3, "framework": 4}
@@ -47,6 +48,19 @@ ROLE_TOKEN_TYPES: dict[str, int] = {"cation": 2, "anion": 3, "dopant": 4, "frame
 
 MAX_ELEMENTS = 6
 MAX_TOKENS = 1 + MAX_ELEMENTS + len(CONTEXT_FIELDS)
+
+NUMERIC_FEATURES: tuple[str, ...] = (
+    "ph",
+    "log_surface_area",
+    "strain",
+    "defect",
+    "heterojunction",
+    "dopant_fraction",
+    "cocatalyst_loading",
+    "light_intensity",
+    "catalyst_loading",
+    "sacrificial_concentration",
+)
 NODE_FEATURES = len(ELEMENT_FEATURES) + 1 + len(ROLE_IDS)  # + is_material + role one-hot
 
 
@@ -58,16 +72,6 @@ def _context_value(material: Material, field: str) -> str:
     if field == "ph_bucket":
         return ph_bucket(material.ph)
     return str(getattr(material, field))
-
-
-def _context_numeric(material: Material, field: str) -> float:
-    if field == "ph_bucket":
-        return (material.ph - 7.0) / 7.0
-    if field == "dopant":
-        return material.dopant_fraction * 10.0
-    if field == "heterojunction":
-        return {"none": 0.0, "type-II": 1.0, "Z-scheme": 0.5}[material.heterojunction]
-    return 0.0
 
 
 def _heterojunction_flag(kind: str) -> float:
@@ -84,7 +88,6 @@ class FeatureBatch:
     stoich_feat: np.ndarray  # (B, T, 2) float
     ctx_type: np.ndarray  # (B, T) int
     ctx_value: np.ndarray  # (B, T) int
-    ctx_numeric: np.ndarray  # (B, T, 1) float
     token_mask: np.ndarray  # (B, T) bool
     token_node: np.ndarray  # (B, T) int
     node_select: np.ndarray  # (B, T, N) float
@@ -92,7 +95,7 @@ class FeatureBatch:
     node_mask: np.ndarray  # (B, N) bool
     adjacency: np.ndarray  # (B, N, N) float
     pair_bias: np.ndarray  # (B, T, T) float
-    numeric: np.ndarray  # (B, 6) float
+    numeric: np.ndarray  # (B, 10) float
     targets: np.ndarray  # (B, 3) float: eg, log1p(her), stability
     ids: list[str]
     labels: list[str]
@@ -109,7 +112,6 @@ class FeatureBatch:
             stoich_feat=self.stoich_feat[index],
             ctx_type=self.ctx_type[index],
             ctx_value=self.ctx_value[index],
-            ctx_numeric=self.ctx_numeric[index],
             token_mask=self.token_mask[index],
             token_node=self.token_node[index],
             node_select=self.node_select[index],
@@ -166,13 +168,12 @@ class Featurizer:
         stoich_feat = np.zeros((batch_size, MAX_TOKENS, 2), dtype=np.float64)
         ctx_type = np.zeros((batch_size, MAX_TOKENS), dtype=np.int64)
         ctx_value = np.zeros((batch_size, MAX_TOKENS), dtype=np.int64)
-        ctx_numeric = np.zeros((batch_size, MAX_TOKENS, 1), dtype=np.float64)
         token_mask = np.zeros((batch_size, MAX_TOKENS), dtype=bool)
         token_node = np.zeros((batch_size, MAX_TOKENS), dtype=np.int64)
         node_features = np.zeros((batch_size, num_nodes, NODE_FEATURES), dtype=np.float64)
         node_mask = np.zeros((batch_size, num_nodes), dtype=bool)
         adjacency = np.zeros((batch_size, num_nodes, num_nodes), dtype=np.float64)
-        numeric = np.zeros((batch_size, 6), dtype=np.float64)
+        numeric = np.zeros((batch_size, len(NUMERIC_FEATURES)), dtype=np.float64)
         targets = np.full((batch_size, 3), np.nan, dtype=np.float64)
         ids: list[str] = []
         labels: list[str] = []
@@ -225,7 +226,6 @@ class Featurizer:
                 token_type[b, position] = 6
                 ctx_type[b, position] = CONTEXT_FIELDS.index(field) + 1
                 ctx_value[b, position] = self.ctx_vocab[field].get(value, 0)
-                ctx_numeric[b, position, 0] = _context_numeric(material, field)
                 token_mask[b, position] = True
                 token_node[b, position] = 0
                 position += 1
@@ -237,6 +237,10 @@ class Featurizer:
                 material.defect,
                 _heterojunction_flag(material.heterojunction),
                 material.dopant_fraction * 10.0,
+                np.log10(max(material.cocatalyst_loading, 0.0) * 1000.0 + 1.0) / 2.0,
+                np.log10(max(material.light_intensity, 0.0) + 1.0) / 2.5,
+                np.log10(max(material.catalyst_loading, 0.0) * 1000.0 + 1.0) / 2.0,
+                np.log10(max(material.sacrificial_concentration, 0.0) * 100.0 + 1.0) / 2.0,
             )
             targets[b] = (material.eg, np.log1p(material.her), material.stability)
             ids.append(material.id)
@@ -262,7 +266,6 @@ class Featurizer:
             stoich_feat=stoich_feat,
             ctx_type=ctx_type,
             ctx_value=ctx_value,
-            ctx_numeric=ctx_numeric,
             token_mask=token_mask,
             token_node=token_node,
             node_select=node_select,

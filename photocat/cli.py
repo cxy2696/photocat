@@ -7,8 +7,7 @@ import json
 from pathlib import Path
 
 from . import __version__
-from .data.dataset import Featurizer
-from .data.fingerprint import fingerprint_matrix, max_similarity
+from .benchmarks import BenchmarkConfig, run_gap_benchmark, run_her_benchmark
 from .data.synth import generate_dataset, load_materials, save_materials, summary
 from .kg.corpus import generate_corpus, save_corpus
 from .kg.store import build_kg
@@ -50,21 +49,19 @@ def _data(args: argparse.Namespace) -> int:
     out.mkdir(parents=True, exist_ok=True)
     bundle = generate_dataset(n=args.materials, seed=args.seed)
     save_materials(out / "materials.csv", bundle.materials)
-    save_materials(out / "anchors.csv", bundle.anchors)
-    corpus = generate_corpus(bundle.materials, bundle.anchors, n=args.corpus, seed=args.seed)
+    corpus = generate_corpus(bundle.materials, n=args.corpus, seed=args.seed)
     save_corpus(out / "corpus.jsonl", corpus)
     print(json.dumps(summary(bundle.materials), indent=2, ensure_ascii=False))
-    print(f"wrote {out}/materials.csv, anchors.csv, corpus.jsonl")
+    print(f"wrote {out}/materials.csv, corpus.jsonl")
     return 0
 
 
 def _kg(args: argparse.Namespace) -> int:
     data_dir = Path(args.data)
     materials = load_materials(data_dir / "materials.csv")
-    anchors = load_materials(data_dir / "anchors.csv") if (data_dir / "anchors.csv").exists() else []
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    with build_kg(out, materials, anchors) as store:
+    with build_kg(out, materials) as store:
         print(json.dumps(store.stats(), indent=2))
     return 0
 
@@ -97,6 +94,27 @@ def _screen(args: argparse.Namespace) -> int:
             f"sim={row['novelty_similarity']:.2f} score={row['score']:.3f}"
         )
     print(f"\nwrote {path}")
+    return 0
+
+
+def _bench(args: argparse.Namespace) -> int:
+    config = BenchmarkConfig(
+        seed=args.seed,
+        epochs=args.epochs,
+        ensemble_size=args.ensemble,
+        figures=not args.no_figures,
+        verbose=True,
+    )
+    results = {}
+    if args.dataset in ("gap", "all"):
+        results["gap"] = run_gap_benchmark(
+            BenchmarkConfig(**{**config.to_dict(), "out_dir": "runs/bench_gap"})
+        )
+    if args.dataset in ("her", "all"):
+        results["her"] = run_her_benchmark(
+            BenchmarkConfig(**{**config.to_dict(), "out_dir": "runs/bench_her"})
+        )
+    print(json.dumps(results, indent=2, ensure_ascii=False))
     return 0
 
 
@@ -157,6 +175,14 @@ def build_parser() -> argparse.ArgumentParser:
     kg.add_argument("--data", default="data")
     kg.add_argument("--out", default="data/kg.sqlite")
     kg.set_defaults(func=_kg)
+
+    bench = subparsers.add_parser("bench", help="run the real-data benchmarks")
+    bench.add_argument("--dataset", choices=("gap", "her", "all"), default="all")
+    bench.add_argument("--epochs", type=int, default=24)
+    bench.add_argument("--ensemble", type=int, default=2)
+    bench.add_argument("--seed", type=int, default=2025)
+    bench.add_argument("--no-figures", action="store_true")
+    bench.set_defaults(func=_bench)
 
     screen = subparsers.add_parser("screen", help="re-rank candidates from an existing run")
     screen.add_argument("--run", default="runs/demo")

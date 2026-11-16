@@ -1,0 +1,85 @@
+{
+  "verified_on": "2026-11-16",
+  "proposal_references": [
+    {
+      "key": "masood2019",
+      "label": "[1]",
+      "citation": "H. Masood, C. Y. Toe, W. Y. Teoh, V. Sethu, R. Amal, Machine Learning for Accelerated Discovery of Solar Photocatalysts, ACS Catalysis 9(12), 11774-11787 (2019).",
+      "doi": "10.1021/acscatal.9b02531",
+      "type": "journal"
+    },
+    {
+      "key": "xu2025",
+      "label": "[2]",
+      "citation": "Y. Xu, H. Wang, W. Zhang, L. Xie, Y. Chen, F. Salim, Y. Zhang, J. Gooding, AI-Empowered Catalyst Discovery: A Survey from Classical Machine Learning Approaches to Large Language Models, arXiv:2502.13626 (2025).",
+      "arxiv": "2502.13626",
+      "doi": "10.48550/arXiv.2502.13626",
+      "type": "arxiv"
+    },
+    {
+      "key": "xie2024",
+      "label": "[3]",
+      "citation": "T. Xie, Y. Wan, H. Wang, I. Ostrom, et al., Opinion Mining by Convolutional Neural Networks for Maximizing Discoverability of Nanomaterials, Journal of Chemical Information and Modeling 64(7), 2746-2759 (2024).",
+      "doi": "10.1021/acs.jcim.3c00746",
+      "type": "journal"
+    },
+    {
+      "key": "delgado2023",
+      "label": "[4]",
+      "citation": "F. Delgado-Licona, M. Abolhasani, Research Acceleration in Self-Driving Labs: Technological Roadmap toward Accelerated Materials and Molecular Discovery, Advanced Intelligent Systems 5(4), 2200331 (2023).",
+      "doi": "10.1002/aisy.202200331",
+      "type": "journal"
+    },
+    {
+      "key": "venugopal2024",
+      "label": "[5]",
+      "citation": "V. Venugopal, E. Olivetti, MatKG: An autonomously generated knowledge graph in Material Science, Scientific Data 11, 217 (2024).",
+      "doi": "10.1038/s41597-024-03039-z",
+      "type": "journal"
+    },
+    {
+      "key": "venugopal2022",
+      "label": "[6]",
+      "citation": "V. Venugopal, S. Pai, E. Olivetti, MatKG: The Largest Knowledge Graph in Materials Science - Entities, Relations, and Link Prediction through Graph Representation Learning, NeurIPS 2022 AI for Accelerated Materials Design Workshop; arXiv:2210.17340.",
+      "arxiv": "2210.17340",
+      "url": "https://openreview.net/forum?id=xyJ_0-WCIZN",
+      "type": "workshop"
+    },
+    {
+      "key": "guo2024",
+      "label": "[7]",
+      "citation": "P. Guo, W. Meng, Y. Bao, Knowledge graph-guided data-driven design of ultra-high-performance concrete (UHPC) with interpretability and physicochemical reaction discovery capability, Construction and Building Materials 430, 136502 (2024).",
+      "doi": "10.1016/j.conbuildmat.2024.136502",
+      "type": "journal"
+    },
+    {
+      "key": "liu2024",
+      "label": "[8]",
+      "citation": "J. Liu, L. Liang, B. Su, D. Wu, Transformative strategies in photocatalyst design: merging computational methods and deep learning, Journal of Materials Informatics 4(4) (2024).",
+      "doi": "10.20517/jmi.2024.48",
+      "type": "journal"
+    }
+  ],
+  "data_sources": [
+    {
+      "key": "matbench_expt_gap",
+      "citation": "A. Dunn, Q. Wang, A. Ganose, D. Dopp, A. Jain, Benchmarking materials property prediction methods: the Matbench test set and Automatminer reference algorithm, npj Computational Materials 6, 138 (2020).",
+      "doi": "10.1038/s41524-020-00406-3",
+      "dataset_doi": "10.6084/m9.figshare.9765779",
+      "source_doi": "10.1021/acs.jpclett.8b00124",
+      "license": "MIT",
+      "url": "https://ndownloader.figshare.com/files/17494814",
+      "sha256": "1e6816fb8e7132535b76cdac458c4d53944eca97e1ecb68e6a8fd853c9cedc3a",
+      "usage": "experimental band-gap benchmark"
+    },
+    {
+      "key": "ees_her",
+      "citation": "Y. Haghshenas, W. P. Wong, D. Gunawan, A. Khataee, R. Keyikoglu, A. Razmjou, P. V. Kumar, C. Y. Toe, H. Masood, R. Amal, V. Sethu, Predicting the rates of photocatalytic hydrogen evolution over cocatalyst-deposited TiO2 using machine learning with active photon flux as a unifying feature, EES Catalysis 2, 612-623 (2024).",
+      "doi": "10.1039/D3EY00246B",
+      "license": "No licence declared upstream; not redistributed",
+      "url": "https://github.com/yousof96/ligh_intensity_paper",
+      "sha256": "9081eef866c4b14bc20a13ab0f6bccb5a4fe0d43474d21416175b7b9782beb03",
+      "usage": "paper-held-out HER rate benchmark"
+    }
+  ]
+}

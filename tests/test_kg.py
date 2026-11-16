@@ -17,8 +17,8 @@ class KnowledgeGraphTest(unittest.TestCase):
         cls.bundle = generate_dataset(n=250, seed=5)
         cls.tempdir = tempfile.TemporaryDirectory()
         cls.path = Path(cls.tempdir.name) / "kg.sqlite"
-        cls.store = build_kg(cls.path, cls.bundle.materials, cls.bundle.anchors)
-        cls.corpus = generate_corpus(cls.bundle.materials, cls.bundle.anchors, n=30, seed=5)
+        cls.store = build_kg(cls.path, cls.bundle.materials)
+        cls.corpus = generate_corpus(cls.bundle.materials, n=30, seed=5)
 
     @classmethod
     def tearDownClass(cls):
@@ -41,10 +41,7 @@ class KnowledgeGraphTest(unittest.TestCase):
         metrics = evaluate_extraction(self.corpus, predictions)
         self.assertGreater(metrics["relations"]["f1"], 0.9)
         self.assertGreater(metrics["entities"]["f1"], 0.9)
-        labels = {
-            material.label: material
-            for material in list(self.bundle.materials) + list(self.bundle.anchors)
-        }
+        labels = {material.label: material for material in self.bundle.materials}
         linking = load_extractions(self.store, self.corpus, labels)
         self.assertGreater(linking["link_rate"], 0.9)
 

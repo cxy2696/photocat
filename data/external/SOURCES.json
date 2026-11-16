@@ -1,0 +1,22 @@
+{
+  "retrieved": "2026-11-16",
+  "files": {
+    "matbench_expt_gap": {
+      "path": "data/external/matbench_expt_gap.json.gz",
+      "url": "https://ndownloader.figshare.com/files/17494814",
+      "sha256": "1e6816fb8e7132535b76cdac458c4d53944eca97e1ecb68e6a8fd853c9cedc3a",
+      "license": "MIT",
+      "doi": "10.6084/m9.figshare.9765779",
+      "citation": "Dunn et al., Benchmarking materials property prediction methods: the Matbench test set and Automatminer reference algorithm, npj Comput. Mater. 6, 138 (2020). Data derived from Zhuo et al., J. Phys. Chem. Lett. 9, 1668-1673 (2018), doi:10.1021/acs.jpclett.8b00124."
+    },
+    "ees_her": {
+      "path": "data/external/ees_her.csv",
+      "workbook": "data/external/ees_all_lit_data.xlsx",
+      "url": "https://raw.githubusercontent.com/yousof96/ligh_intensity_paper/master/paper_data/all_lit_data.xlsx",
+      "sha256": "9081eef866c4b14bc20a13ab0f6bccb5a4fe0d43474d21416175b7b9782beb03",
+      "license": "No licence declared upstream; not redistributed with photocat.",
+      "doi": "10.1039/D3EY00246B",
+      "citation": "Haghshenas et al., Predicting the rates of photocatalytic hydrogen evolution over cocatalyst-deposited TiO2 using machine learning with active photon flux as a unifying feature, EES Catalysis 2, 612-623 (2024), doi:10.1039/D3EY00246B."
+    }
+  }
+}

@@ -1,4 +1,4 @@
-"""End-to-end evaluation: in-distribution, family holdout, anchors, baselines.
+"""End-to-end evaluation: in-distribution, family holdout, baselines.
 
 Reports the proposal's success criteria explicitly:
 

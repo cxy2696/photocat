@@ -3,7 +3,8 @@ import unittest
 import numpy as np
 
 from photocat.data.dataset import MAX_TOKENS, Featurizer, ph_bucket
-from photocat.data.synth import generate_dataset, parse_formula
+from photocat.data.formula import parse_formula
+from photocat.data.synth import generate_dataset
 
 
 class DataTest(unittest.TestCase):
@@ -12,8 +13,8 @@ class DataTest(unittest.TestCase):
         cls.bundle = generate_dataset(n=500, seed=3)
 
     def test_formula_parser(self):
-        self.assertEqual(parse_formula("TiO2"), [("Ti", 1.0), ("O", 2.0)])
-        self.assertEqual(parse_formula("Bi2WO6"), [("Bi", 2.0), ("W", 1.0), ("O", 6.0)])
+        self.assertEqual(parse_formula("TiO2"), {"Ti": 1.0, "O": 2.0})
+        self.assertEqual(parse_formula("Bi2WO6"), {"Bi": 2.0, "W": 1.0, "O": 6.0})
 
     def test_split_has_no_group_leakage(self):
         train = {(material.formula, material.dopant) for material in self.bundle.train}

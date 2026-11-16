@@ -1,314 +1,190 @@
 # 算法说明
 
-本文档给出 `photocat` 各模块的数学定义、实现位置与设计取舍。代码只依赖 NumPy；
-GNN、Transformer、DistMult 与 Adam 都在 `photocat/autograd.py` 的反向模式自动微分上实现。
+仓库里有两条独立的建模路线，刻意没有强行合并：
+
+1. **组成 → 带隙**：数据为任意化学式，使用 KG 子图 GNN 与图增强 Transformer；
+2. **TiO2 工艺条件 → HER**：数据为小规模过程表，使用 RBF 核岭回归。
+
+此外还有一条**合成场景**管线，用潜热模型生成材料，测试 KG、排序和主动学习。
+它不参与真实数据的结论。以下分别说明。
 
 ---
 
-## 1. 总体流程
+## 1. 组成模型：GNN + 图增强 Transformer
 
-对应提案 Figure 1 的五个阶段：
+### 1.1 化学式与元素角色
 
-```text
-数据整合 → KG 构建（NER/RE） → GNN 节点嵌入 → 图增强 Transformer → 候选排序
-             ↑                                        ↓
-        规则推理 / 链接预测                     共形区间 + 主动学习
-```
+化学式解析（`photocat/data/formula.py`）支持嵌套括号和小数计量，例如
+`Ag(AuS)2`、`Ba2Sb7HO14`、`Ca0.5Sr0.5TiO3`。解析后给每个元素分配
+cation/anion 角色：O、N、S、Se、Te、F、Cl、Br、I 视为阴离子；无氧时 P 视为
+阴离子；其余为阳离子。这只是组成启发式，不做氧化态平衡。
 
-`python -m photocat demo` 顺序执行：
+元素表包含 103 个元素。原先手写的 37 个元素保留文献离子半径；其余 63 个由
+pymatgen 2026.10.24 的周期表数据生成，缺失的 d 电子数和丰度用保守占位值。
+因此模型可以读任意 Matbench 化学式，但描述符精度低于专门的结构数据。
 
-1. 生成物理启发的合成材料库与文献语料；
-2. 构建 SQLite 知识图谱，做规则抽取、链接预测与语义推理；
-3. 拟合特征器并训练深度集成；
-4. 在同分布测试集、晶族留出集与文献锚点上评测；
-5. 按带隙窗口、HER、稳定性与新颖性筛选并排序；
-6. 模拟主动学习、计算注意力/Shapley/扰动重要性；
-7. 生成图表与 Markdown 报告。
+### 1.2 KG 子图
 
----
+每个材料是一个小图：
 
-## 2. 合成数据潜热模型
+- 节点：1 个材料节点 + 最多 6 个元素节点；
+- 边：`material—hasElement—element`（权重为化学计量分数），元素共现边
+  （权重 \(2f_i f_j\)），自环；
+- 邻接按行归一化：\(\hat A = D^{-1}(A+I)\)。
 
-> 数据是**基准**，不是 DFT。所有公式在 `photocat/data/synth.py` 中可审计。
-
-### 2.1 组成描述符
-
-对材料 \(m\)，令阳离子/骨架元素集合为 \(C\)，阴离子集合为 \(A\)，化学计量为 \(q_i\)：
+节点特征：元素节点使用 9 个元素性质 + `is_material` + 角色 one-hot，共 14 维；
+材料节点使用 9 个组成描述符。图的消息传递为
 
 \[
-\bar\chi = \frac{\sum_{i\in C} q_i \chi_i}{\sum_{i\in C} q_i},\qquad
-\bar r = \frac{\sum_{i\in C} q_i r_i}{\sum_{i\in C} q_i},\qquad
-\sigma_r^2 = \frac{\sum_{i\in C} q_i (r_i-\bar r)^2}{\sum_{i\in C} q_i}.
-\]
-
-钙钛矿使用 Goldschmidt 容差因子：
-
-\[
-t = \frac{r_A + r_O}{\sqrt 2 (r_B + r_O)},\qquad d_{\text{dist}} = |t-1|,
-\]
-
-其他晶族用半径方差与结构基线组合：
-
-\[
-d_{\text{dist}} = d_{\text{family}} + \frac{\sigma_r}{\bar r + 10^{-6}}.
-\]
-
-### 2.2 带隙
-
-\[
-E_g = E_g^{\text{family}}
-+ 0.45(1.75-\bar\chi)
-+ \Delta_{\text{ion}}
-+ 0.90\,d_{\text{dist}}
-- 0.60\cdot 50\epsilon
-- 0.55\eta
-+ \Delta_{\text{dop}}
-- \Delta_{\text{bow}}
-+ \varepsilon_g,
-\]
-
-其中 \(\epsilon\) 是应变、\(\eta\) 是缺陷密度、\(\Delta_{\text{ion}}\) 是元素/阴离子经验偏移，
-\(\Delta_{\text{bow}} = 0.55\sqrt{\mathrm{Var}(\chi)}\) 是双阳离子 bowing，\(\varepsilon_g\sim\mathcal N(0,0.14^2)\)。
-最后裁剪到 \([0.55,5.2]\) eV。
-
-### 2.3 能带边与 HER
-
-\[
-E_{CB} = -0.10 + 0.22(\bar\chi-1.75) - 0.35 d_{\text{dist}} + 0.015 \bar d + 0.10\Delta_{\text{dop}},
-\qquad E_{VB}=E_{CB}+E_g.
-\]
-
-\[
-\begin{aligned}
-D_h &= \sigma(4(-0.05-E_{CB})),\\
-D_o &= \sigma(4(E_{VB}-1.23)),\\
-L &= \exp\!\left[-\tfrac12\left(\frac{E_g-1.95}{0.62}\right)^2\right],\\
-\eta_{cs} &= \sigma\!\left(4\left(\eta_{cs}^{\text{family}} + 1.4(d_{\text{dist}}-d_{\text{family}}) + \Delta_{cs} + \Delta_{het} - 1.2\eta - 0.35\right)\right),\\
-HER &= 22\,D_h D_o L\,\eta_{cs}\,
-\left(\frac{S}{25}\right)^{0.30} f_{\text{cocat}} f_{pH}\,
-e^{\varepsilon_{her}},
-\end{aligned}
-\]
-
-\(S\) 为比表面积，\(f_{pH}=\exp[-\tfrac12((pH-7)/3.2)^2]\)，\(f_{\text{cocat}}\) 为助催化剂因子，
-\(\varepsilon_{her}\sim\mathcal N(0,0.22^2)\)，结果裁剪到 \([0.01,80]\)。
-
-### 2.4 稳定性
-
-\[
-P(\text{stable})=\sigma\!\left(b_{\text{family}}+0.8\left(1-\frac{|pH-7|}{6}\right)-1.5\eta+0.6\Delta_{stab}-0.5\cdot 50|\epsilon|+0.35(1-d_{\text{dist}})+\varepsilon_s\right).
-\]
-
-硫化物晶族 \(b_{\text{family}}=-1.2\)，因此光腐蚀风险高；这为“高 HER 但低稳定”的筛选权衡提供了真实感。
-
----
-
-## 3. 图表示与特征化
-
-每个材料被表示为 KG 子图：
-
-* 节点：1 个材料节点 + 最多 6 个元素节点；
-* 边：`material—hasElement—element`（权重为化学计量分数），元素共现边（权重 \(2f_i f_j\)），自环；
-* 邻接矩阵按行归一化：\(\hat A = D^{-1}(A+I)\)。
-
-材料节点特征为 9 维组成描述符；元素节点为 9 维元素性质 + `is_material` 标志 + 角色 one-hot，
-共 14 维。实现在 `photocat/data/dataset.py`。
-
-Token 序列：
-
-```text
-[CLS]  element×≤6  family  crystal  cocatalyst  method  dopant  pH-bucket  heterojunction
-```
-
-元素 token 由元素嵌入、角色嵌入、化学计量投影、**GNN 节点嵌入投影**和位置嵌入相加；
-`[CLS]` 额外接收材料图池化向量与实验条件数值向量；7 个上下文 token 由类型/取值嵌入构成。
-
----
-
-## 4. KG 子图 GNN
-
-\[
-H^{(0)} = X,\qquad
 H^{(\ell+1)} = \mathrm{ReLU}\!\left(\hat A H^{(\ell)} W^{(\ell)} + b^{(\ell)}\right),
 \]
 
-材料向量 \(h_m = H^{(L)}_0\)，池化向量 \(h_{\text{pool}} = \frac{1}{|\mathcal V|}\sum_{v} H^{(L)}_v\)。
-实现：`photocat/models/gnn.py`。GNN 与 Transformer 端到端联合训练。
+材料向量取材料节点，图池化向量取节点均值。
 
----
+### 1.3 Token 序列
 
-## 5. 图增强 Transformer
+```text
+[CLS]  element×≤6  family  crystal  cocatalyst  method  dopant
+       pH-bucket  heterojunction  sacrificial-agent
+```
 
-### 5.1 图偏置注意力
+元素 token 由元素嵌入、角色嵌入、化学计量投影、GNN 节点嵌入投影和位置嵌入
+相加。`[CLS]` 额外接收材料图向量与 10 维数值上下文（pH、比表面积、应变、缺陷、
+异质结、掺杂分数、助催化剂负载、光强、催化剂用量、牺牲剂浓度）。真实数据缺失的
+上下文字段映射到 unknown 槽，不会让模型崩溃。
 
-对第 \(\ell\) 层：
+### 1.4 图偏置注意力
 
 \[
-\tilde h = \mathrm{LN}(h),\quad
-Q=\tilde h W_Q,\; K=\tilde h W_K,\; V=\tilde h W_V,
-\]
-
-\[
-S_{ij} = \frac{q_i^\top k_j}{\sqrt{d_h}} + \beta_h \tilde A_{ij},
+s_{ij} = \frac{q_i^\top k_j}{\sqrt{d_h}} + \beta_h \tilde A_{ij},
 \qquad
-\alpha_{ij} = \mathrm{softmax}_{j\in\text{valid}}(S_{ij}),
+\alpha_{ij} = \mathrm{softmax}_{j\in\text{valid}}(s_{ij}),
 \]
 
-其中 \(\tilde A_{ij}\) 是 token 所映射节点间的归一化邻接权重（由 `node_select @ A @ node_select^T` 得到），
-\(\beta_h\) 是每个注意力头学习的标量。padding key 被 mask，padding query 的输出被池化 mask 忽略。
+\(\tilde A_{ij}\) 是 token 对应节点间的归一化邻接权重，\(\beta_h\) 是每个头学习的
+标量。padding key 被 mask。两层 pre-LN 残差块之后，CLS 向量与均值池化向量拼接，
+经过一个共享 MLP，分别输出带隙、\(\log(1+HER)\)、稳定性 logit。
 
-残差与 pre-LN：
+### 1.5 掩码多任务损失
+
+真实数据往往只有一个目标。设 \(m_{i,t}\in\{0,1\}\) 表示第 \(i\) 个样本的第
+\(t\) 个目标是否存在：
 
 \[
-h \leftarrow h + \mathrm{Concat}(\alpha V)W_O,\qquad
-h \leftarrow h + \mathrm{GELU}(\mathrm{LN}(h)W_1+b_1)W_2+b_2.
+\mathcal L = \sum_t \lambda_t
+\frac{\sum_i m_{i,t} w_i (\hat y_{i,t}-y_{i,t})^2}
+     {\sum_i m_{i,t} w_i},
 \]
 
-### 5.2 输出头
+稳定性项用带权 BCE。某个任务在当前 batch 没有标签时直接跳过。目标标准化使用
+`nanmean`/`nanstd`；全缺失的目标列在推理时返回 NaN，而不是编造一个数。
+这是当前代码能同时跑 Matbench（只有带隙）和 EES（带隙 + HER）的原因。
 
-\[
-z = [\,h_{\text{CLS}}; \mathrm{mean}_{i\in\text{valid}} h_i\,],\qquad
-\hat y = W_2\,\mathrm{GELU}(W_1 z + b_1)+b_2,
-\]
+### 1.6 训练
 
-三个独立头分别输出标准化带隙、标准化 \(\log(1+HER)\)、稳定性 logit。
-实现：`photocat/models/transformer.py`，参数量约 9 万（d_model=64，2 层）。
+- AdamW，cosine 衰减到初始学习率的 10%，梯度裁剪 5；
+- 早停看验证损失；合成场景按晶族可选逆频率加权或重采样；
+- 集成多个随机种子，均值作为预测，标准差作为不确定性。
 
-### 5.3 损失
-
-\[
-\mathcal L = \lambda_g \mathrm{MSE}(\hat g, g)
-+ \lambda_h \mathrm{MSE}(\hat h, \log(1+HER))
-+ \lambda_s \mathrm{BCE}(\hat s, s),
-\]
-
-默认 \((\lambda_g,\lambda_h,\lambda_s)=(1,1,0.25)\)。支持按晶族逆频率加权（`balanced`）
-或按晶族重采样（`oversample`）以缓解 TiO₂/钙钛矿过代表问题。
+Matbench 实测：4,603 条、元素体系留出，RMSE 0.809 eV、MAE 0.472 eV。
+同数据上的 ridge/kNN 为 1.218/1.138 eV。详细协议见 `docs/RESULTS.md`。
 
 ---
 
-## 6. 语义知识图谱
+## 2. 小表模型：RBF 核岭回归
 
-### 6.1 本体与存储
+EES 表只有 552 条完整记录、34 篇论文。组成 Transformer 在这类数据上会记住
+工艺组合；因此 HER 基准使用核岭回归：
 
-`photocat/kg/ontology.py` 定义 11 类实体与 23 种关系。SQLite 中有三张核心表：
+\[
+f(x) = \sum_{i=1}^{n} \alpha_i
+\exp\!\left(-\gamma \|x-x_i\|^2\right) + \bar y,
+\qquad
+(K+\lambda I)\alpha = y-\bar y.
+\]
 
-* `entities(id, name, type)`；
-* `triples(subject, relation, object, value, unit, source)`；
-* `properties(material_id, eg, her, stability, cb, vb, ...)` 用于快速数值筛选。
+特征为助催化剂 one-hot、助催化剂负载、比表面积、带隙、牺牲剂 one-hot 与浓度、
+光强、合成路线 one-hot。目标为 \(\log_{10}(1+\text{Rate})\)。所有特征先标准化。
+\(\gamma=0.03\)、\(\lambda=0.1\) 固定，不做测试折调参。
 
-唯一索引 `(subject, relation, object, source)` 保证重复导入安全。
+评估用 leave-papers-out 5 折：同一篇论文的所有记录只出现在一个折里。结果
+R² 0.568、MAE 0.289、Spearman 0.698；线性 ridge 为 0.470、0.324、0.586。
 
-### 6.2 规则抽取
+这不是说核方法普遍优于 Transformer，而是说在 552 行、34 组的数据上，先验更强、
+参数更少的模型更合适。README 中两个模型分开报告。
 
-`photocat/kg/extraction.py` 用正则 + 化学式校验抽取：化学式、带隙、HER、pH、合成方法、
-掺杂元素、助催化剂、晶系。语料由 `photocat/kg/corpus.py` 生成并带 gold 三元组，
-`evaluate_extraction` 计算 micro P/R/F1。
+---
 
-### 6.3 语义推理
+## 3. 知识图谱（合成场景）
 
-`photocat/kg/reasoning.py` 物化以下推理三元组（带 `source` 溯源）：
+`photocat/kg/` 提供 SQLite 三元组存储、本体、规则抽取、规则推理和 DistMult
+链接预测。KG 的实体来自合成场景或用户自己的数据；当前没有把 Matbench 全量
+4,603 条材料导入图谱作为真实知识库。
 
-* `inferred:Candidate`：\(1.23\le E_g\le 3.0\)，\(HER\ge6\)，\(P_{stable}\ge0.55\)；
-* `inferred:EarthAbundant`：所有元素地壳丰度 \(\ge 10\) ppm；
-* `inferred:Novel`：与训练库最大 Tanimoto \(<0.8\)；
-* `inferred:HeterojunctionWith`：共享元素且能带交错
+推理规则包括：
+
+- `inferred:Candidate`：\(1.23\le E_g\le 3.0\)、\(HER\ge 6\)、稳定性 \(\ge0.55\)；
+- `inferred:EarthAbundant`：组成元素地壳丰度均 \(\ge10\) ppm；
+- `inferred:Novel`：与训练库最大 Tanimoto \(<0.8\)；
+- `inferred:HeterojunctionWith`：共享元素且能带交错
   \((E_{CB}^a<E_{CB}^b<E_{VB}^a<E_{VB}^b)\) 或对称情形。
 
-`explain(material_id)` 返回直接证据、推理三元组、异质结伙伴与到应用节点的路径。
-
-### 6.4 链接预测
-
-DistMult 打分：
-
-\[
-f(s,r,o) = \sum_k e_{s,k}\, w_{r,k}\, e_{o,k},
-\]
-
-以负采样 BCE 训练；评测采用 filtered ranking，并额外报告全实体采样的 MRR。
-实现：`photocat/kg/link_prediction.py`。
+规则结果带 `source` 字段，可回到具体三元组。抽取器只在合成语料上做单元测试，
+不声称达到 SciBERT 的文献抽取水平。
 
 ---
 
-## 7. 候选筛选与排序
+## 4. 候选筛选（合成场景）
 
-硬约束：
-
-\[
-1.23 \le \hat E_g \le 3.0,\quad \widehat{HER}\ge 6,\quad \hat P_{stable}\ge0.55,\quad
-\max_{m\in\mathcal D_{\text{train}}}\mathrm{Tanimoto}(m, c)<0.8.
-\]
-
-组成指纹（`photocat/data/fingerprint.py`）对元素、计量分箱、元素对、比例分箱做 BLAKE2b 哈希，
-Tanimoto 为 \( |A\cap B|/|A\cup B| \)。
-
-综合得分（权重可配置）：
+硬约束：带隙窗口、HER、稳定性、Tanimoto 新颖性。综合分数为
 
 \[
-\text{score}=0.42\,\tilde z(\log(1+HER))
-+0.18\,e^{-\frac12\left(\frac{\hat E_g-2.0}{0.55}\right)^2}
+0.42\,\tilde z(\log(1+HER))
++0.18\,e^{-\frac12\left(\frac{E_g-2.0}{0.55}\right)^2}
 +0.14\,P_{stable}
 +0.14\,\text{novelty}
 +0.07\,\text{certainty}
 +0.05\,\text{abundance}.
 \]
 
-* certainty：\(\exp(-(\sigma_{E_g}/0.30+\sigma_{HER}/2))\)；
-* novelty：\(0.8-\text{sim}\) 归一化；
-* abundance：\(\log_{10}(\min_i \text{abundance}_i+1)/3\) 截断。
-
-shortlist 采用贪心“分数优先 + 相似度阈值 0.92 + 同 label 去重”；同时给出
-Pareto 前沿（HER、稳定性、novelty、带隙接近度）。
+shortlist 使用分数排序、Tanimoto 阈值 0.92、同 label 去重，并给出 Pareto 前沿。
+这些权重是场景设置，不是从真实实验优化出来的。
 
 ---
 
-## 8. 不确定性与共形预测
+## 5. 不确定性与主动学习
 
-深度集成（不同种子）给出 \(\mu(x)\) 与 \(\sigma(x)\)。在验证集上做 split-conformal：
+深度集成给出 \(\mu(x)\)、\(\sigma(x)\)；验证集上校准 split-conformal 区间：
 
 \[
-q = \mathrm{Quantile}_{\lceil (n+1)(1-\alpha)\rceil/n}\left(|y_i-\hat y_i|\right),\quad \alpha=0.1,
+q = \mathrm{Quantile}_{\lceil(n+1)(1-\alpha)\rceil/n}(|y_i-\hat y_i|).
 \]
 
-测试区间 \(\hat y\pm q\)。带隙与 log-HER 分别校准。报告同分布覆盖率、OOD 覆盖率与区间宽度。
+Matbench 90% 区间半宽 2.221 eV、覆盖率 0.880。区间被高带隙离群点拉宽，说明
+单点带隙预测不应被过度解读。
+
+主动学习模拟只用于合成场景：岭回归代理 + bootstrap 标准差 + 带带隙窗口惩罚的
+采集函数，与同预算随机采样比较。它验证的是流程可以闭环，不是真实实验节省。
 
 ---
 
-## 9. 主动学习模拟
+## 6. 评测与复现
 
-* 用岭回归代理模型（`photocat/models/baselines.py` 的 `_fit_ridge`）拟合已揭示标签；
-* 5 个 bootstrap 模型估计 \(\sigma\)；
-* 采集函数 \(\text{acq}=\hat z_{\log HER}+\beta\hat\sigma-\text{window penalty}\)；
-* 每轮选 100 个，记录对“真实 top 1%”的 recall，与同预算随机采样对比；
-* 报告中给出达到 50%/80% recall 所需新标签数与相对节省。
-
----
-
-## 10. 评测协议
-
-| Split | 规则 | 用途 |
+| 基准 | 划分 | 指标 |
 | --- | --- | --- |
-| train / val / test | 按 `(formula, dopant)` 整组分层划分 | 同分布泛化 |
-| ood | 完全留出 `oxynitride`、`sulfide` | 分布外压力测试 |
-| anchors | 20 个文献材料近似值 | 外部 sanity check |
+| Matbench 实验带隙 | 元素体系留出 | RMSE / MAE / R² / conformal coverage |
+| EES HER | 按论文 5 折 | log R² / MAE / Spearman |
+| 合成场景 | 组成+掺杂整组、晶族留出 | 流程完整性，不作为真实性能 |
 
-指标：带隙 RMSE/MAE/R²/Pearson；HER RMSE/MAE/R²/Pearson/Spearman；稳定性 MAE；
-bootstrap 90% CI；共形覆盖率；短名单新颖性中位数；主动学习 recall 曲线。
+数据哈希、DOI 与许可证见 `docs/DATA.md`，引用核对见 `docs/REFERENCES.md`。
+`python scripts/verify_provenance.py` 会重新查询 Crossref/arXiv 并校验文件哈希。
 
----
+## 7. 复杂度与限制
 
-## 11. 复杂度与运行时间
-
-* 模型参数量约 5–9 万（取决于 d_model）；12k 材料、30 epoch、3 模型在 Apple Silicon CPU 上约 4–6 分钟；
-* 自实现的 NumPy 自动微分保证零深度学习框架依赖，但比 PyTorch 慢约一个数量级；
-* 全部随机过程由种子控制，数据、划分、训练与筛选可复现。
-
----
-
-## 12. 关键假设与限制
-
-1. 合成数据的绝对带隙/HER 不代表真实材料，仅用于可复现的算法基准；
-2. 组成指纹是结构指纹的代理，真实场景应使用 SOAP/CrystalNN/RDKit；
-3. 规则抽取器在受控语料上接近满分，真实文献需 SciBERT/LLM + 人工校验；
-4. 晶族留出性能下降，说明离线模型不能替代主动学习/实验闭环；
-5. 模型只预测三个标量目标，未显式建模温度、助催化剂负载量、光照强度等条件。
+- Matbench：4,603 条、2 个模型 × 24 epoch，Apple Silicon CPU 约 1.5 分钟。
+- 合成场景：12,000 条、3 个模型 × 30 epoch，约 5 分钟。
+- 组成模型没有晶体结构、温度、形貌和缺陷信息；实验带隙本身的测量差异也限制了
+  可达到的精度。
+- EES 表 TiO2 比例极高，不能外推到其他材料家族；Rate 单位未统一。
+- 仓库没有使用 Materials Project、Open Catalyst 或 SciBERT 的原始数据，相关
+  来源只在提案讨论中出现，不能算作本仓库的验证数据。

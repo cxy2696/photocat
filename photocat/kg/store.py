@@ -12,7 +12,6 @@ from .ontology import (
     design_target_entities,
     design_target_triples,
     entity_definitions,
-    material_entity,
     material_triples,
 )
 
@@ -372,13 +371,7 @@ class KGStore:
         self.close()
 
 
-def build_kg(
-    path: str | Path,
-    materials: Sequence[Material],
-    anchors: Sequence[Material] | None = None,
-) -> KGStore:
+def build_kg(path: str | Path, materials: Sequence[Material]) -> KGStore:
     store = KGStore(path)
     store.bulk_load(materials, source="synthetic")
-    if anchors:
-        store.bulk_load(anchors, source="literature_seed")
     return store

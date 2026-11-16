@@ -19,5 +19,5 @@ jobs:
           pip install -e . pytest
       - name: Test
         run: python -m pytest -q
-      - name: Smoke demo
+      - name: Scenario smoke test
         run: python -m photocat demo --fast --out runs/ci --no-figures

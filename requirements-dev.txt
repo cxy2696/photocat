@@ -1,3 +1,4 @@
 -r requirements.txt
 pytest>=7
 matplotlib>=3.7
+openpyxl>=3.1

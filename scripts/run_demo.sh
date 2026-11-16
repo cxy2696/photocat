@@ -9,4 +9,4 @@ fi
 source .venv/bin/activate
 
 python -m pip install -e ".[dev]"
-python -m photocat demo --out runs/demo "$@"
+python -m photocat demo --fast --out runs/scenario

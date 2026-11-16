@@ -14,6 +14,12 @@ runs/
 docs/source/paper.txt
 .mplconfig/
 
+# External data: Matbench is MIT and committed; EES is downloaded locally.
+data/external/*
+!data/external/README.md
+!data/external/SOURCES.json
+!data/external/matbench_expt_gap.json.gz
+
 # OS / editor
 .DS_Store
 .idea/

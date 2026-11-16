@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import time
+import warnings
 from dataclasses import dataclass, field
 from typing import Sequence
 
@@ -18,20 +19,32 @@ from .models.transformer import GraphAugmentedTransformer
 
 @dataclass
 class TargetScaler:
-    """Standardisation for bandgap and log-HER; stability stays a probability."""
+    """Standardisation for available targets; missing targets stay missing.
+
+    A target column with no observations is marked ``observed=False`` and is
+    returned as NaN at inference time.  This is what lets the same trainer use
+    Matbench (bandgap only), EES (HER only) and the synthetic scenario
+    (all three) without inventing labels.
+    """
 
     mean: np.ndarray
     std: np.ndarray
+    observed: np.ndarray = field(default_factory=lambda: np.ones(3, dtype=bool))
 
     @classmethod
     def fit(cls, targets: np.ndarray) -> "TargetScaler":
         targets = np.asarray(targets, dtype=np.float64)
-        mean = targets.mean(axis=0)
-        std = targets.std(axis=0)
+        observed = np.isfinite(targets).sum(axis=0) > 0
+        with np.errstate(invalid="ignore"), warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            mean = np.nanmean(targets, axis=0)
+            std = np.nanstd(targets, axis=0)
+        mean = np.nan_to_num(mean, nan=0.0)
+        std = np.nan_to_num(std, nan=1.0)
         std[std < 1e-8] = 1.0
         mean[2] = 0.0
         std[2] = 1.0
-        return cls(mean=mean, std=std)
+        return cls(mean=mean, std=std, observed=observed)
 
     def scale(self, targets: np.ndarray) -> np.ndarray:
         return (np.asarray(targets, dtype=np.float64) - self.mean) / self.std
@@ -41,16 +54,23 @@ class TargetScaler:
         eg = predictions[:, 0] * self.std[0] + self.mean[0]
         her = np.expm1(predictions[:, 1] * self.std[1] + self.mean[1])
         stability = 1.0 / (1.0 + np.exp(-predictions[:, 2]))
-        return np.stack([eg, her, stability], axis=-1)
+        physical = np.stack([eg, her, stability], axis=-1)
+        physical[:, ~self.observed] = np.nan
+        return physical
 
-    def to_dict(self) -> dict[str, list[float]]:
-        return {"mean": self.mean.tolist(), "std": self.std.tolist()}
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "mean": self.mean.tolist(),
+            "std": self.std.tolist(),
+            "observed": self.observed.tolist(),
+        }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, list[float]]) -> "TargetScaler":
+    def from_dict(cls, payload: dict[str, object]) -> "TargetScaler":
         return cls(
             mean=np.asarray(payload["mean"], dtype=np.float64),
             std=np.asarray(payload["std"], dtype=np.float64),
+            observed=np.asarray(payload.get("observed", [True, True, True]), dtype=bool),
         )
 
 
@@ -162,6 +182,9 @@ class Trainer:
         val_batch = featurizer.transform(val_materials)
         scaler = TargetScaler.fit(train_batch.targets)
         scaled_targets = scaler.scale(train_batch.targets)
+        target_masks = np.isfinite(train_batch.targets)
+        safe_scaled = np.nan_to_num(scaled_targets, nan=0.0)
+        safe_raw = np.nan_to_num(train_batch.targets, nan=0.0)
 
         sample_weights = np.ones(len(train_materials), dtype=np.float64)
         sampling_probabilities = np.full(len(train_materials), 1.0 / len(train_materials))
@@ -205,16 +228,29 @@ class Trainer:
                 chunk = train_batch.take(index)
                 weights = sample_weights[index]
                 output = model.forward(chunk)
-                eg_loss = mse_loss(output.eg, scaled_targets[index, 0], weights)
-                her_loss = mse_loss(output.her, scaled_targets[index, 1], weights)
-                stability_loss = bce_with_logits(
-                    output.stability, train_batch.targets[index, 2], weights
-                )
-                loss = (
-                    config.loss_weights[0] * eg_loss
-                    + config.loss_weights[1] * her_loss
-                    + config.loss_weights[2] * stability_loss
-                )
+                masks = target_masks[index]
+                loss_terms = []
+                for task, (head, weight) in enumerate(
+                    zip((output.eg, output.her), config.loss_weights[:2])
+                ):
+                    task_weights = weights * masks[:, task]
+                    if task_weights.sum() > 0:
+                        loss_terms.append(
+                            weight * mse_loss(head, safe_scaled[index, task], task_weights)
+                        )
+                stability_weights = weights * masks[:, 2]
+                if stability_weights.sum() > 0:
+                    loss_terms.append(
+                        config.loss_weights[2]
+                        * bce_with_logits(
+                            output.stability, safe_raw[index, 2], stability_weights
+                        )
+                    )
+                if not loss_terms:
+                    continue
+                loss = loss_terms[0]
+                for term in loss_terms[1:]:
+                    loss = loss + term
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.clip_grad_norm(config.grad_clip)
@@ -248,11 +284,12 @@ class Trainer:
             else:
                 epochs_without_improvement += 1
             if config.verbose:
-                print(
-                    f"epoch {epoch:3d} | train {train_loss:.4f} | val {val_loss:.4f} | "
-                    f"Eg RMSE {val_eg_rmse:.3f} eV | HER r {val_her_pearson:.3f}",
-                    flush=True,
-                )
+                parts = [f"epoch {epoch:3d}", f"train {train_loss:.4f}", f"val {val_loss:.4f}"]
+                if np.isfinite(val_eg_rmse):
+                    parts.append(f"Eg RMSE {val_eg_rmse:.3f} eV")
+                if np.isfinite(val_her_pearson):
+                    parts.append(f"HER r {val_her_pearson:.3f}")
+                print(" | ".join(parts), flush=True)
             if epochs_without_improvement >= config.patience:
                 break
 
@@ -270,15 +307,32 @@ class Trainer:
         scaler: TargetScaler,
     ) -> tuple[float, float, float]:
         scaled_val = scaler.scale(val_batch.targets)
-        eg_mse = float(np.mean((val_raw[:, 0] - scaled_val[:, 0]) ** 2))
-        her_mse = float(np.mean((val_raw[:, 1] - scaled_val[:, 1]) ** 2))
-        z = val_raw[:, 2]
-        y = val_batch.targets[:, 2]
-        bce = float(np.mean(np.maximum(z, 0.0) - z * y + np.log1p(np.exp(-np.abs(z)))))
-        val_loss = eg_mse + her_mse + 0.25 * bce
+        masks = np.isfinite(val_batch.targets)
+        losses: list[float] = []
+        for task in range(2):
+            if masks[:, task].any():
+                losses.append(
+                    float(np.mean((val_raw[masks[:, task], task] - scaled_val[masks[:, task], task]) ** 2))
+                )
+        if masks[:, 2].any():
+            z = val_raw[masks[:, 2], 2]
+            y = val_batch.targets[masks[:, 2], 2]
+            losses.append(
+                0.25
+                * float(np.mean(np.maximum(z, 0.0) - z * y + np.log1p(np.exp(-np.abs(z)))))
+            )
+        val_loss = float(sum(losses)) if losses else float("inf")
         physical = scaler.to_physical(val_raw)
-        eg_rmse = rmse(val_batch.targets[:, 0], physical[:, 0])
-        her_r = pearson(val_batch.targets[:, 1], physical[:, 1])
+        eg_rmse = (
+            rmse(val_batch.targets[masks[:, 0], 0], physical[masks[:, 0], 0])
+            if masks[:, 0].any()
+            else float("nan")
+        )
+        her_r = (
+            pearson(val_batch.targets[masks[:, 1], 1], physical[masks[:, 1], 1])
+            if masks[:, 1].any()
+            else float("nan")
+        )
         return val_loss, eg_rmse, her_r
 
 

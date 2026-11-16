@@ -17,7 +17,7 @@ from ..autograd import (
     load_params,
     save_params,
 )
-from ..data.dataset import CONTEXT_FIELDS, MAX_TOKENS, NODE_FEATURES, FeatureBatch
+from ..data.dataset import CONTEXT_FIELDS, MAX_TOKENS, NODE_FEATURES, NUMERIC_FEATURES, FeatureBatch
 from .gnn import GNNOutput, KGSubgraphGNN
 
 
@@ -67,7 +67,7 @@ class GraphAugmentedTransformer:
         gnn_dim: int = 32,
         gnn_layers: int = 2,
         max_tokens: int = MAX_TOKENS,
-        numeric_dim: int = 6,
+        numeric_dim: int = len(NUMERIC_FEATURES),
         node_feature_dim: int = NODE_FEATURES,
         seed: int = 0,
     ) -> None:

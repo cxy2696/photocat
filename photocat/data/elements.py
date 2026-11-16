@@ -17,6 +17,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .elements_extra import EXTRA_ROWS
+
 
 @dataclass(frozen=True)
 class Element:
@@ -84,7 +86,9 @@ _ELEMENTS: tuple[Element, ...] = (
     Element("C", "carbon", 6, 2.55, 0.770, 4, 12.01, 200.0, 0, 14, 2, 0.35),
 )
 
-ELEMENT_LIST: tuple[Element, ...] = tuple(sorted(_ELEMENTS, key=lambda e: e.z))
+ELEMENT_LIST: tuple[Element, ...] = tuple(
+    sorted((*_ELEMENTS, *(Element(*row) for row in EXTRA_ROWS)), key=lambda e: e.z)
+)
 BY_SYMBOL: dict[str, Element] = {element.symbol: element for element in ELEMENT_LIST}
 
 #: Integer ids used by embeddings; 0 is reserved for padding.

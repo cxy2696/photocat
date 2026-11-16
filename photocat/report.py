@@ -22,7 +22,7 @@ def _fmt(value: Any, digits: int = 3) -> str:
     if value is None:
         return "—"
     if isinstance(value, bool):
-        return "✅" if value else "❌"
+        return "是" if value else "否"
     if isinstance(value, (int, float)):
         if value != value:  # NaN
             return "—"
@@ -64,7 +64,6 @@ def generate_report(run_dir: str | Path) -> Path:
     splits = metrics.get("splits", metrics)
     test = splits.get("test", {}) or {}
     ood = splits.get("ood", {}) or {}
-    anchors = splits.get("anchors", {}) or {}
     criteria = metrics.get("success_criteria", {}) or {}
     conformal = metrics.get("conformal", {}) or {}
     ranking_stats = metrics.get("ranking", {}) or {}
@@ -77,15 +76,16 @@ def generate_report(run_dir: str | Path) -> Path:
     novelty_median = ranking_stats.get("similarity_median")
 
     lines: list[str] = []
-    lines.append("# 光催化材料发现：KG + 图增强 Transformer 运行报告\n")
+    lines.append("# 合成场景运行报告：KG + 图增强 Transformer\n")
     lines.append(
-        f"> 自动生成于 {datetime.now():%Y-%m-%d %H:%M}。"
-        "数据为**物理启发的合成基准**（非 DFT/实验数据库），目标是为算法提供可复现的验证环境。\n"
+        f"> 生成于 {datetime.now():%Y-%m-%d %H:%M}。"
+        "本报告使用 `photocat/data/synth.py` 生成的合成数据，不是实验或 DFT 结果，"
+        "不能作为材料发现证据。真实数据基准见 `docs/RESULTS.md`。\n"
     )
 
-    lines.append("## 0. 结论摘要\n")
+    lines.append("## 0. 结果摘要\n")
     lines.append(_table(
-        ["指标", "结果", "目标", "判定"],
+        ["指标", "结果", "场景验收线", "是否达到"],
         [
             ["带隙 RMSE（同分布测试集）", f"{_fmt(eg_rmse)} eV", "< 0.3 eV", _fmt(bool(criteria.get("bandgap_rmse_below_0.3_ev")))],
             ["HER Pearson（同分布测试集）", _fmt(her_pearson), "> 0.8", _fmt(bool(criteria.get("her_pearson_above_0.8")))],
@@ -96,9 +96,9 @@ def generate_report(run_dir: str | Path) -> Path:
     ))
     lines.append("")
     lines.append(
-        "核心结论：模型在同分布测试集上达到论文设定的带隙与 HER 指标；"
-        "在完全未见的晶族上性能下降，说明分布外泛化仍是主要限制。"
-        "KG 提供可追溯的筛选与解释，主动学习模拟显示可用更少的实验标签找到头部材料。\n"
+        "这些数字只说明合成场景中的流程可以收敛、排序可以运行。"
+        "带隙与 HER 的同分布误差、晶族留出误差都不能外推到真实材料；"
+        "主动学习节省同样来自合成池，不是实验预算。\n"
     )
 
     lines.append("## 1. 数据与评测协议\n")
@@ -111,14 +111,14 @@ def generate_report(run_dir: str | Path) -> Path:
                 ["训练 / 验证 / 测试", f"{data_summary.get('train', '—')} / {data_summary.get('val', '—')} / {data_summary.get('test', '—')}"],
                 ["晶族留出", data_summary.get("ood", "—")],
                 ["留出晶族", ", ".join(data_summary.get("holdout_families", []))],
-                ["候选比例（真实标签）", _fmt(data_summary.get("candidate_rate"))],
+                ["候选比例（合成标签）", _fmt(data_summary.get("candidate_rate"))],
             ],
         ))
         lines.append("")
     lines.append(
         "**Split 设计**：按“化学式 + 掺杂元素”整组划分，训练/测试不共享同一组成；"
         "`oxynitride` 与 `sulfide` 两个晶族完全留出作为分布外压力测试。"
-        "锚点集为 20 个文献光催化剂的近似带隙/HER，仅用于外部 sanity check。\n"
+        "这些划分规则只用于合成场景。\n"
     )
     lines.append(_figure(run_dir, "bias_audit.png", "晶族覆盖与偏置审计"))
     lines.append(_figure(run_dir, "training_curves.png", "训练曲线"))
@@ -148,7 +148,7 @@ def generate_report(run_dir: str | Path) -> Path:
 
     lines.append("## 3. 主结果\n")
     result_rows = []
-    for name, label in (("train", "训练"), ("val", "验证"), ("test", "同分布测试"), ("ood", "晶族留出"), ("anchors", "文献锚点")):
+    for name, label in (("train", "训练"), ("val", "验证"), ("test", "同分布测试"), ("ood", "晶族留出")):
         block = splits.get(name, {}) or {}
         if not block:
             continue

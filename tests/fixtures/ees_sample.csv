@@ -1,0 +1,9 @@
+id,paper,description,eg,her,cocatalyst,cocatalyst_loading,surface_area,sacrificial_agent,sacrificial_concentration,light_intensity,synthesis,rate_unit
+T01,Paper A,synthetic sample A,3.15,75.0,Pt,0.002,50.0,methanol,0.2,250.0,com,test units
+T02,Paper A,synthetic sample B,3.16,40.0,Pt,0.002,121.0,methanol,0.2,250.0,com,test units
+T03,Paper B,synthetic sample C,3.14,1.5,Bare,0.0,50.0,methanol,0.09,158.0,com,test units
+T04,Paper B,synthetic sample D,3.15,12.0,Bare,0.0,114.0,methanol,0.09,250.0,ht,test units
+T05,Paper C,synthetic sample E,3.20,4200.0,Pt,0.01,30.0,ethanol,0.1,300.0,sg,test units
+T06,Paper C,synthetic sample F,3.18,120.0,Au,0.005,45.0,ethanol,0.1,300.0,sg,test units
+T07,Paper D,synthetic sample G,3.10,5.0,Ni,0.02,80.0,glycerol,0.2,200.0,ht,test units
+T08,Paper D,synthetic sample H,3.12,65.0,Ni,0.02,60.0,glycerol,0.2,200.0,ht,test units

@@ -6,7 +6,7 @@ records: composition, crystal family, synthesis conditions, bandgap, band
 positions, charge-separation efficiency, stability and hydrogen evolution rate
 (HER).  Targets are produced by a transparent latent model with literature-like
 trends and calibrated noise; known photocatalysts are kept as a separate
-"literature seed" set for external sanity checks and KG anchoring.
+"real-data adapters in :mod:`photocat.data.external` cover public benchmarks.
 
 This is a benchmark for the *algorithmic pipeline*, not a replacement for DFT
 or experiment.  The loader in :mod:`photocat.data.io` accepts real CSV exports
@@ -19,7 +19,6 @@ from __future__ import annotations
 import csv
 import json
 import math
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -33,8 +32,6 @@ from .elements import (
     COCATALYSTS,
     DOPANT_EFFECTS,
     DOPANT_LIBRARY,
-    ELEMENT_FEATURES,
-    MATERIAL_FEATURES,
     METHODS,
 )
 
@@ -72,6 +69,8 @@ FAMILIES: dict[str, Family] = {
     ),
     "sulfide": Family("sulfide", "metal sulfide", "hexagonal", 2.20, -1.20, 0.50, 0.10, 0.08),
     "oxyhalide": Family("oxyhalide", "bismuth oxyhalide", "tetragonal", 2.80, 0.90, 0.55, 0.09, 0.10),
+    # Used by external datasets that carry composition but no crystal family.
+    "unknown": Family("unknown", "unclassified composition", "unknown", 2.50, 0.80, 0.50, 0.10, 0.00),
 }
 
 HOLDOUT_FAMILIES: tuple[str, ...] = ("oxynitride", "sulfide")
@@ -106,9 +105,14 @@ class Material:
     cs_eff: float
     cb: float
     vb: float
+    cocatalyst_loading: float = 0.0
+    light_intensity: float = 0.0
+    catalyst_loading: float = 0.0
+    sacrificial_agent: str = "unknown"
+    sacrificial_concentration: float = 0.0
     descriptors: dict[str, float] = field(default_factory=dict)
     source: str = "synthetic"
-    is_anchor: bool = False
+    reference: str = ""
     split: str = ""
 
     @property
@@ -150,6 +154,11 @@ class Material:
             "strain": f"{self.strain:.6f}",
             "defect": f"{self.defect:.6f}",
             "heterojunction": self.heterojunction,
+            "cocatalyst_loading": f"{self.cocatalyst_loading:.6g}",
+            "light_intensity": f"{self.light_intensity:.6g}",
+            "catalyst_loading": f"{self.catalyst_loading:.6g}",
+            "sacrificial_agent": self.sacrificial_agent,
+            "sacrificial_concentration": f"{self.sacrificial_concentration:.6g}",
             "eg": f"{self.eg:.4f}",
             "her": f"{self.her:.4f}",
             "stability": f"{self.stability:.4f}",
@@ -158,7 +167,7 @@ class Material:
             "vb": f"{self.vb:.4f}",
             "descriptors": json.dumps(self.descriptors, sort_keys=True),
             "source": self.source,
-            "is_anchor": "1" if self.is_anchor else "0",
+            "reference": self.reference,
             "split": self.split,
         }
         return row
@@ -190,9 +199,14 @@ class Material:
             cs_eff=float(row["cs_eff"]),
             cb=float(row["cb"]),
             vb=float(row["vb"]),
+            cocatalyst_loading=float(row.get("cocatalyst_loading", 0.0)),
+            light_intensity=float(row.get("light_intensity", 0.0)),
+            catalyst_loading=float(row.get("catalyst_loading", 0.0)),
+            sacrificial_agent=row.get("sacrificial_agent", "unknown"),
+            sacrificial_concentration=float(row.get("sacrificial_concentration", 0.0)),
             descriptors=json.loads(row["descriptors"]),
             source=row.get("source", "synthetic"),
-            is_anchor=row.get("is_anchor", "0") == "1",
+            reference=row.get("reference", ""),
             split=row.get("split", ""),
         )
 
@@ -592,7 +606,6 @@ def make_material(
     dopant_fraction: float = 0.0,
     crystal_system: str | None = None,
     source: str = "synthetic",
-    is_anchor: bool = False,
 ) -> Material:
     elements = list(elements)
     if dopant != "none" and dopant_fraction > 0:
@@ -644,7 +657,6 @@ def make_material(
         vb=float(vb),
         descriptors=descriptors,
         source=source,
-        is_anchor=is_anchor,
     )
 
 
@@ -703,105 +715,6 @@ def generate_materials(
 
 
 # ---------------------------------------------------------------------------
-# Literature anchors
-# ---------------------------------------------------------------------------
-
-_FORMULA_PATTERN = re.compile(r"([A-Z][a-z]?)(\d*\.?\d*)")
-
-
-def parse_formula(formula: str) -> list[tuple[str, float]]:
-    """Parse a plain chemical formula (no parentheses or hydrates)."""
-    cleaned = formula.replace("g-", "").replace(" ", "")
-    parts = _FORMULA_PATTERN.findall(cleaned)
-    if not parts or "".join(f"{s}{q}" for s, q in parts) != cleaned:
-        raise ValueError(f"cannot parse formula {formula!r}")
-    parsed: list[tuple[str, float]] = []
-    for symbol, count in parts:
-        if symbol not in BY_SYMBOL:
-            raise ValueError(f"unknown element {symbol!r} in {formula!r}")
-        parsed.append((symbol, float(count) if count else 1.0))
-    return parsed
-
-
-#: Approximate literature values used only for external sanity checks.
-#: (formula, family, eg, her, cocatalyst, method, ph)
-_ANCHORS: tuple[tuple[str, str, float, float, str, str, float], ...] = (
-    ("TiO2", "rutile", 3.20, 4.0, "Pt", "hydrothermal", 7.0),
-    ("SnO2", "rutile", 3.60, 0.4, "none", "hydrothermal", 7.0),
-    ("CeO2", "rutile", 3.20, 0.3, "none", "hydrothermal", 7.0),
-    ("Fe2O3", "corundum", 2.10, 0.3, "none", "hydrothermal", 7.0),
-    ("Bi2O3", "corundum", 2.80, 0.5, "none", "solid-state", 7.0),
-    ("SrTiO3", "perovskite", 3.20, 8.0, "Pt", "solid-state", 7.0),
-    ("BaTiO3", "perovskite", 3.20, 2.5, "none", "solid-state", 7.0),
-    ("NaTaO3", "perovskite", 4.00, 6.5, "NiS", "solid-state", 7.0),
-    ("BiVO4", "scheelite", 2.40, 1.5, "none", "hydrothermal", 7.0),
-    ("CuWO4", "scheelite", 2.40, 0.7, "none", "hydrothermal", 7.0),
-    ("ZnFe2O4", "spinel", 1.90, 0.6, "none", "hydrothermal", 7.0),
-    ("C3N4", "carbon_nitride", 2.70, 3.0, "Pt", "thermal-polymerization", 7.0),
-    ("Bi2WO6", "aurivillius", 2.70, 1.2, "none", "hydrothermal", 7.0),
-    ("TaON", "oxynitride", 2.40, 4.5, "Pt", "hydrothermal", 7.0),
-    ("LaTiO2N", "oxynitride", 2.10, 3.5, "none", "solid-state", 7.0),
-    ("CdS", "sulfide", 2.40, 5.0, "MoS2", "hydrothermal", 7.0),
-    ("ZnS", "sulfide", 3.60, 1.0, "none", "hydrothermal", 7.0),
-    ("MoS2", "sulfide", 1.80, 2.0, "none", "hydrothermal", 7.0),
-    ("BiOCl", "oxyhalide", 3.20, 0.9, "none", "hydrothermal", 7.0),
-    ("BiOBr", "oxyhalide", 2.80, 1.1, "none", "hydrothermal", 7.0),
-)
-
-
-def make_anchors(seed: int = 2025) -> list[Material]:
-    """Build literature-seed records; targets are overridden with known gaps/HER."""
-    rng = np.random.default_rng(seed + 1)
-    anchors: list[Material] = []
-    for i, (formula, family, eg, her, cocat, method, ph) in enumerate(_ANCHORS):
-        parsed = parse_formula(formula)
-        elements: list[tuple[str, float, str]] = []
-        for symbol, stoich in parsed:
-            if symbol == "C" and family == "carbon_nitride":
-                role = "framework"
-            elif BY_SYMBOL[symbol].is_anion:
-                role = "anion"
-            else:
-                role = "cation"
-            elements.append((symbol, stoich, role))
-        context = {
-            "method": method,
-            "surface_area": 30.0 if family != "carbon_nitride" else 60.0,
-            "ph": ph,
-            "strain": 0.0,
-            "defect": 0.05,
-            "heterojunction": "none",
-            "cocatalyst": cocat,
-        }
-        material = make_material(
-            900000 + i,
-            family,
-            elements,
-            formula,
-            context,
-            rng,
-            eg_noise=0.0,
-            her_noise=0.0,
-            crystal_system=FAMILIES[family].crystal_system,
-            source="literature_seed",
-            is_anchor=True,
-        )
-        # Override with literature values; keep derived descriptors / band edges
-        # but recompute band edges from the known gap.
-        material.eg = float(eg)
-        material.her = float(her)
-        material.vb = material.cb + material.eg
-        material.cs_eff = float(
-            1.0 / (1.0 + math.exp(-4.0 * (FAMILIES[family].base_cs - 0.35)))
-        )
-        material.stability = float(
-            1.0 / (1.0 + math.exp(-(FAMILIES[family].base_stability + 0.35)))
-        )
-        anchors.append(material)
-    return anchors
-
-
-# ---------------------------------------------------------------------------
 # Splitting and I/O
 # ---------------------------------------------------------------------------
 
@@ -809,7 +722,6 @@ def make_anchors(seed: int = 2025) -> list[Material]:
 @dataclass
 class DatasetBundle:
     materials: list[Material]
-    anchors: list[Material]
 
     def split(self, name: str) -> list[Material]:
         return [material for material in self.materials if material.split == name]
@@ -882,7 +794,7 @@ def generate_dataset(
 ) -> DatasetBundle:
     materials = generate_materials(n=n, seed=seed, eg_noise=eg_noise, her_noise=her_noise)
     assign_splits(materials, val_frac=val_frac, test_frac=test_frac, holdout_families=holdout_families, seed=seed)
-    return DatasetBundle(materials=materials, anchors=make_anchors(seed=seed))
+    return DatasetBundle(materials=materials)
 
 
 def save_materials(path: str | Path, materials: Sequence[Material]) -> None:

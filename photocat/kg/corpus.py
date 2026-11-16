@@ -113,7 +113,6 @@ def _template_record(material: Material, template: int) -> tuple[str, list[tuple
 
 def generate_corpus(
     materials: Sequence[Material],
-    anchors: Sequence[Material] = (),
     n: int = 500,
     seed: int = 2025,
 ) -> list[CorpusRecord]:
@@ -122,7 +121,6 @@ def generate_corpus(
     if len(selected) > n:
         index = rng.choice(len(selected), n, replace=False)
         selected = [selected[i] for i in sorted(index)]
-    selected.extend(anchors)
     records: list[CorpusRecord] = []
     for material in selected:
         for _ in range(20):

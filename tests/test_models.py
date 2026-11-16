@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from photocat.data.dataset import Featurizer
+from photocat.data.elements import ELEMENT_IDS
 from photocat.data.synth import generate_dataset
 from photocat.models.transformer import GraphAugmentedTransformer
 from photocat.training import TargetScaler, TrainConfig, Trainer, forward_batches
@@ -17,8 +18,16 @@ class ModelTest(unittest.TestCase):
         cls.featurizer = Featurizer.fit(cls.bundle.train)
         cls.batch = cls.featurizer.transform(cls.bundle.test[:24])
         cls.ctx_sizes = [cls.featurizer.vocab_size(field) for field in cls.featurizer.ctx_vocab]
+        element_vocab = max(ELEMENT_IDS.values()) + 1
         cls.model = GraphAugmentedTransformer(
-            64, cls.ctx_sizes, d_model=32, n_heads=4, n_layers=2, d_ff=48, gnn_dim=16, seed=2
+            element_vocab,
+            cls.ctx_sizes,
+            d_model=32,
+            n_heads=4,
+            n_layers=2,
+            d_ff=48,
+            gnn_dim=16,
+            seed=2,
         )
 
     def test_forward_shapes_and_attention(self):
@@ -27,7 +36,7 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(output.her.shape, (24,))
         self.assertEqual(output.stability.shape, (24,))
         attention = output.attention[0]
-        self.assertEqual(attention.shape, (24, 4, 14, 14))
+        self.assertEqual(attention.shape, (24, 4, 15, 15))
         np.testing.assert_allclose(attention.sum(axis=-1), 1.0, atol=1e-9)
         leak = np.where(self.batch.token_mask[:, None, None, :], 0.0, attention).max()
         self.assertLess(leak, 1e-8)
@@ -56,7 +65,14 @@ class ModelTest(unittest.TestCase):
 
     def test_training_decreases_loss(self):
         model = GraphAugmentedTransformer(
-            64, self.ctx_sizes, d_model=32, n_heads=4, n_layers=1, d_ff=48, gnn_dim=16, seed=3
+            max(ELEMENT_IDS.values()) + 1,
+            self.ctx_sizes,
+            d_model=32,
+            n_heads=4,
+            n_layers=1,
+            d_ff=48,
+            gnn_dim=16,
+            seed=3,
         )
         trainer = Trainer(TrainConfig(epochs=3, batch_size=64, verbose=False, seed=1))
         result = trainer.train(

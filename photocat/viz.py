@@ -113,6 +113,40 @@ def plot_parity(
     return _save(figure, path)
 
 
+def plot_parity_single(
+    truth: np.ndarray,
+    prediction: np.ndarray,
+    path: str | Path,
+    title: str,
+    xlabel: str,
+    ylabel: str,
+    log_axes: bool = False,
+) -> str:
+    plt = _plt()
+    figure, axis = plt.subplots(figsize=(4.6, 4.4))
+    low = float(min(truth.min(), prediction.min()))
+    high = float(max(truth.max(), prediction.max()))
+    axis.scatter(truth, prediction, s=14, alpha=0.55, c="#31688e")
+    axis.plot([low, high], [low, high], color="black", lw=1.0, ls="--")
+    if log_axes:
+        axis.set_xscale("log")
+        axis.set_yscale("log")
+    axis.set_title(title)
+    axis.set_xlabel(xlabel)
+    axis.set_ylabel(ylabel)
+    axis.text(
+        0.04,
+        0.96,
+        f"n = {len(truth)}\nRMSE = {rmse(truth, prediction):.3f}\n"
+        f"MAE = {np.mean(np.abs(truth - prediction)):.3f}",
+        transform=axis.transAxes,
+        va="top",
+        fontsize=8,
+        bbox={"facecolor": "white", "alpha": 0.75, "edgecolor": "none"},
+    )
+    return _save(figure, path)
+
+
 def plot_screening(
     eg: np.ndarray,
     her: np.ndarray,
