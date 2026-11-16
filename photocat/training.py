@@ -118,13 +118,14 @@ def forward_batches(
     batch: FeatureBatch,
     batch_size: int = 256,
     return_attention: bool = False,
+    training: bool = False,
 ) -> dict[str, object]:
     """Run the model over a batch in chunks; returns raw (model-unit) outputs."""
     raw_chunks: list[np.ndarray] = []
     attention_chunks: list[list[np.ndarray]] | None = [] if return_attention else None
     for start in range(0, len(batch), batch_size):
         chunk = batch.take(np.arange(start, min(start + batch_size, len(batch))))
-        output = model.forward(chunk, return_attention=return_attention)
+        output = model.forward(chunk, return_attention=return_attention, training=training)
         raw_chunks.append(output.predict())
         if attention_chunks is not None and output.attention is not None:
             if not attention_chunks:
@@ -144,6 +145,7 @@ def predict_materials(
     materials: Sequence[Material],
     batch_size: int = 256,
     return_attention: bool = False,
+    training: bool = False,
 ) -> dict[str, object]:
     batch = featurizer.transform(materials)
     output = forward_batches(
@@ -227,7 +229,7 @@ class Trainer:
                 index = order[start : start + config.batch_size]
                 chunk = train_batch.take(index)
                 weights = sample_weights[index]
-                output = model.forward(chunk)
+                output = model.forward(chunk, training=True)
                 masks = target_masks[index]
                 loss_terms = []
                 for task, (head, weight) in enumerate(
@@ -346,6 +348,7 @@ def train_ensemble(
     n_layers: int = 2,
     d_ff: int = 128,
     gnn_dim: int = 32,
+    dropout: float = 0.1,
     verbose: bool = True,
 ) -> list[TrainingResult]:
     """Train one model per config (different seeds) sharing the featurizer."""
@@ -365,6 +368,7 @@ def train_ensemble(
             n_layers=n_layers,
             d_ff=d_ff,
             gnn_dim=gnn_dim,
+            dropout=dropout,
             seed=config.seed,
         )
         if verbose:

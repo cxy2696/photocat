@@ -69,6 +69,7 @@ class GraphAugmentedTransformer:
         max_tokens: int = MAX_TOKENS,
         numeric_dim: int = len(NUMERIC_FEATURES),
         node_feature_dim: int = NODE_FEATURES,
+        dropout: float = 0.1,
         seed: int = 0,
     ) -> None:
         if d_model % n_heads != 0:
@@ -87,6 +88,8 @@ class GraphAugmentedTransformer:
         self.max_tokens = max_tokens
         self.numeric_dim = numeric_dim
         self.node_feature_dim = node_feature_dim
+        self.dropout = float(dropout)
+        self._rng = np.random.default_rng(seed + 999)
 
         self.gnn = KGSubgraphGNN(
             hidden_dim=gnn_dim, layers=gnn_layers, in_dim=node_feature_dim, seed=seed + 101
@@ -202,6 +205,7 @@ class GraphAugmentedTransformer:
             "max_tokens": self.max_tokens,
             "numeric_dim": self.numeric_dim,
             "node_feature_dim": self.node_feature_dim,
+            "dropout": self.dropout,
         }
 
     @classmethod
@@ -218,6 +222,7 @@ class GraphAugmentedTransformer:
             max_tokens=int(config["max_tokens"]),
             numeric_dim=int(config["numeric_dim"]),
             node_feature_dim=int(config["node_feature_dim"]),
+            dropout=float(config.get("dropout", 0.0)),
             seed=seed,
         )
 
@@ -228,7 +233,12 @@ class GraphAugmentedTransformer:
         load_params(path, self.named_params())
 
     # ----------------------------------------------------------------- forward
-    def forward(self, batch: FeatureBatch, return_attention: bool = False) -> ModelOutput:
+    def forward(
+        self,
+        batch: FeatureBatch,
+        return_attention: bool = False,
+        training: bool = False,
+    ) -> ModelOutput:
         token_type = batch.token_type
         is_cls = Tensor((token_type == 1)[..., None].astype(np.float64))
         is_element = Tensor(
@@ -262,6 +272,7 @@ class GraphAugmentedTransformer:
             + self.position_embedding
         )
         hidden = hidden + self.cls_embedding * is_cls
+        hidden = self._dropout(hidden, training)
         numeric = linear(as_tensor(batch.numeric), self.W_numeric, self.b_numeric)
         material = linear(gnn_out.material, self.W_material, self.b_material)
         cls_input = (numeric + material).reshape(batch.token_type.shape[0], 1, self.d_model)
@@ -293,7 +304,7 @@ class GraphAugmentedTransformer:
             y = layernorm(hidden, block["ln2_g"], block["ln2_b"])
             y = linear(y, block["W1"], block["b1"]).gelu()
             y = linear(y, block["W2"], block["b2"])
-            hidden = hidden + y
+            hidden = hidden + self._dropout(y, training)
             if return_attention:
                 attention_maps.append(np.asarray(attention.data))
 
@@ -320,6 +331,12 @@ class GraphAugmentedTransformer:
         batch = tensor.shape[0]
         head_dim = self.d_model // self.n_heads
         return tensor.reshape(batch, self.max_tokens, self.n_heads, head_dim).transpose(0, 2, 1, 3)
+
+    def _dropout(self, tensor: Tensor, training: bool) -> Tensor:
+        if not training or self.dropout <= 0.0:
+            return tensor
+        mask = (self._rng.random(tensor.shape) >= self.dropout).astype(np.float64)
+        return tensor * Tensor(mask / (1.0 - self.dropout))
 
     @staticmethod
     def _select_nodes(node_select: np.ndarray, node_embeddings: Tensor) -> Tensor:

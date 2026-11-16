@@ -1,5 +1,7 @@
 # 结果
 
+[English](RESULTS_en.md) · 中文
+
 本页只汇总**真实数据**上的结果。合成场景的报告由 `python -m photocat demo`
 生成到 `runs/<name>/report.md`，不作为验证证据。
 
@@ -7,7 +9,7 @@
 
 ```bash
 python scripts/fetch_data.py
-python -m photocat bench --dataset all --epochs 24 --ensemble 2 --seed 2025
+python -m photocat bench --dataset all --epochs 24 --ensemble 4 --seed 2025
 ```
 
 ---
@@ -16,17 +18,17 @@ python -m photocat bench --dataset all --epochs 24 --ensemble 2 --seed 2025
 
 **协议**：4,603 条实验带隙；按元素体系留出，3,231 训练 / 704 验证 / 668
 测试。输入只有化学式，没有任何晶体结构或条件信息。模型为 KG 子图 GNN +
-两层图增强 Transformer（d_model=64，4 头，2 个种子集成）。
+两层图增强 Transformer（d_model=64，4 头，2 个普通模型 + 2 个 dropout=0.1 模型）。
 
 | 模型 | RMSE (eV) | MAE (eV) | R² |
 | --- | ---: | ---: | ---: |
 | 均值 | 1.449 | 1.155 | 0.000 |
 | kNN（k=10） | 1.138 | 0.644 | 0.383 |
 | 组成特征 ridge | 1.218 | 0.823 | 0.294 |
-| **GNN + Transformer** | **0.809** | **0.472** | **0.688** |
+| **GNN + Transformer（2 普通 + 2 dropout）** | **0.799** | **0.437** | **0.696** |
 
-- 90% bootstrap 区间（RMSE）：[0.692, 0.931] eV。
-- 90% split-conformal 半宽 2.221 eV，测试覆盖率 0.880。区间很宽，原因是实验
+- 90% bootstrap 区间（RMSE）：[0.666, 0.945] eV。
+- 90% split-conformal 半宽 2.182 eV，测试覆盖率 0.894。区间很宽，原因是实验
   带隙表尾部有若干 10 eV 以上的离群值；这个区间适合作为“不要过度相信单点预测”
   的提醒。
 - 模型在 10 eV 以上的高带隙区明显低估，在 0 eV 附近高估。组成模型没有结构信息，

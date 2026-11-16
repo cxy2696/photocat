@@ -10,4 +10,4 @@ source .venv/bin/activate
 
 python -m pip install -e ".[dev]"
 python scripts/fetch_data.py
-python -m photocat bench --dataset all --epochs 24 --ensemble 2
+python -m photocat bench --dataset all --epochs 24 --ensemble 4

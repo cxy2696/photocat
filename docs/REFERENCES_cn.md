@@ -1,5 +1,7 @@
 # 引用核对
 
+[English](REFERENCES_en.md) · 中文
+
 提案中的 8 条参考文献在 2026-11-16 通过 Crossref 或 arXiv 核对，标题、作者、
 期刊/卷期与 DOI 如下。机器可读版本在 `docs/references.json`，可用
 `python scripts/verify_provenance.py` 重新检查。

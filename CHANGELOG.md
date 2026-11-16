@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0] - 2026-11-16
+
+### Added
+
+- Bilingual documentation: `README_en.md` / `README_cn.md`, `docs/*_en.md` /
+  `docs/*_cn.md`, and bilingual data READMEs. English is the default entry point.
+- Dropout in the composition Transformer (0.1).
+- Mixed validation-selected ensemble for Matbench: two plain models plus two
+  dropout models. This improves the real-data benchmark from RMSE 0.809 eV /
+  MAE 0.472 eV to RMSE 0.799 eV / MAE 0.437 eV.
+
+### Changed
+
+- The default real-data ensemble is four models rather than two.
+- Documentation cross-links and generated report links now use the language
+  suffixes.
+
 ## [0.2.0] - 2026-11-16
 
 ### Added

@@ -80,7 +80,7 @@ def generate_report(run_dir: str | Path) -> Path:
     lines.append(
         f"> 生成于 {datetime.now():%Y-%m-%d %H:%M}。"
         "本报告使用 `photocat/data/synth.py` 生成的合成数据，不是实验或 DFT 结果，"
-        "不能作为材料发现证据。真实数据基准见 `docs/RESULTS.md`。\n"
+        "不能作为材料发现证据。真实数据基准见 `docs/RESULTS_cn.md`。\n"
     )
 
     lines.append("## 0. 结果摘要\n")
@@ -405,7 +405,7 @@ def generate_report(run_dir: str | Path) -> Path:
         config.get("ensemble_size", "3"),
         config.get("out_dir", "runs/demo"),
     ))
-    lines.append("完整算法与公式见 `docs/ALGORITHM.md`；接口与目录见 `README.md`。\n")
+    lines.append("完整算法与公式见 `docs/ALGORITHM_cn.md`；接口与目录见 `README_cn.md`。\n")
 
     lines.append("## 10. 限制\n")
     lines.append(

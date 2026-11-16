@@ -1,7 +1,7 @@
 # External data
 
-The real benchmarks use two external sources. See `docs/DATA.md` for processing
-and `docs/REFERENCES.md` for citations.
+The real benchmarks use two external sources. See `docs/DATA_en.md` for processing
+and `docs/REFERENCES_en.md` for citations.
 
 | File | Source | Licence | Committed |
 | --- | --- | --- | --- |

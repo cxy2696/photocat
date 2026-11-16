@@ -1,5 +1,7 @@
 # 算法说明
 
+[English](ALGORITHM_en.md) · 中文
+
 仓库里有两条独立的建模路线，刻意没有强行合并：
 
 1. **组成 → 带隙**：数据为任意化学式，使用 KG 子图 GNN 与图增强 Transformer；
@@ -86,8 +88,8 @@ s_{ij} = \frac{q_i^\top k_j}{\sqrt{d_h}} + \beta_h \tilde A_{ij},
 - 早停看验证损失；合成场景按晶族可选逆频率加权或重采样；
 - 集成多个随机种子，均值作为预测，标准差作为不确定性。
 
-Matbench 实测：4,603 条、元素体系留出，RMSE 0.809 eV、MAE 0.472 eV。
-同数据上的 ridge/kNN 为 1.218/1.138 eV。详细协议见 `docs/RESULTS.md`。
+Matbench 实测：4,603 条、元素体系留出，2 个普通模型 + 2 个 dropout=0.1 模型的混合集成，RMSE 0.799 eV、MAE 0.437 eV。
+同数据上的 ridge/kNN 为 1.218/1.138 eV。详细协议见 `docs/RESULTS_cn.md`。
 
 ---
 
@@ -176,7 +178,7 @@ Matbench 90% 区间半宽 2.221 eV、覆盖率 0.880。区间被高带隙离群�
 | EES HER | 按论文 5 折 | log R² / MAE / Spearman |
 | 合成场景 | 组成+掺杂整组、晶族留出 | 流程完整性，不作为真实性能 |
 
-数据哈希、DOI 与许可证见 `docs/DATA.md`，引用核对见 `docs/REFERENCES.md`。
+数据哈希、DOI 与许可证见 `docs/DATA_cn.md`，引用核对见 `docs/REFERENCES_cn.md`。
 `python scripts/verify_provenance.py` 会重新查询 Crossref/arXiv 并校验文件哈希。
 
 ## 7. 复杂度与限制

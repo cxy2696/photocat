@@ -1,12 +1,14 @@
 # 数据来源与处理
 
+[English](DATA_en.md) · 中文
+
 这个仓库包含两类数据用途完全不同的材料数据：
 
 1. **真实数据基准**：Matbench 实验带隙、EES 光催化 HER 过程表；
 2. **合成场景**：用于测试知识图谱、候选排序和主动学习流程的物理启发表。
 
 合成场景不是实验或 DFT 数据，不能作为材料发现的证据。README 与
-`docs/RESULTS.md` 中的主要结果来自第 1 类。
+`docs/RESULTS_cn.md` 中的主要结果来自第 1 类。
 
 ---
 
@@ -109,7 +111,7 @@ python scripts/fetch_data.py
 
 ## 4. 接入自己的数据
 
-`Material` 的 CSV 字段见 `data/README.md`。数据加载后：
+`Material` 的 CSV 字段见 `data/README_cn.md`。数据加载后：
 
 1. 用 `photocat.data.formula.parse_formula` 检查化学式；
 2. 用 `photocat.data.synth.compute_descriptors` 计算组成描述符；
@@ -125,7 +127,7 @@ python scripts/fetch_data.py
 ## 5. 可追溯性检查
 
 - 机器可读清单：`docs/references.json`
-- 人工可读清单：`docs/REFERENCES.md`
+- 人工可读清单：`docs/REFERENCES_cn.md`
 - 校验脚本：
 
 ```bash

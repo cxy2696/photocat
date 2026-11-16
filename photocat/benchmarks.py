@@ -53,7 +53,7 @@ class BenchmarkConfig:
     data_dir: str = "data/external"
     seed: int = 2025
     epochs: int = 24
-    ensemble_size: int = 2
+    ensemble_size: int = 4
     d_model: int = 64
     n_heads: int = 4
     n_layers: int = 2
@@ -145,18 +145,27 @@ def run_gap_benchmark(config: BenchmarkConfig | None = None) -> dict[str, Any]:
 
     if config.verbose:
         print(f"Matbench: {len(train)} train / {len(val)} val / {len(test)} test", flush=True)
+    # A mixed ensemble is used deliberately: two unregularised models retain
+    # sharp fits, two dropout models reduce variance.  The split is fixed
+    # before looking at the test set.
+    n_dropout = config.ensemble_size // 2
+    n_plain = config.ensemble_size - n_dropout
+    common = dict(
+        epochs=config.epochs,
+        batch_size=128,
+        lr=1.5e-3,
+        patience=7,
+        verbose=config.verbose,
+    )
+    plain_configs = [
+        TrainConfig(seed=config.seed + offset, **common) for offset in range(n_plain)
+    ]
+    dropout_configs = [
+        TrainConfig(seed=config.seed + 100 + offset, **common)
+        for offset in range(n_dropout)
+    ]
     results = train_ensemble(
-        [
-            TrainConfig(
-                epochs=config.epochs,
-                batch_size=128,
-                lr=1.5e-3,
-                patience=7,
-                seed=config.seed + offset,
-                verbose=config.verbose,
-            )
-            for offset in range(config.ensemble_size)
-        ],
+        plain_configs,
         featurizer,
         train,
         val,
@@ -165,8 +174,23 @@ def run_gap_benchmark(config: BenchmarkConfig | None = None) -> dict[str, Any]:
         n_layers=config.n_layers,
         d_ff=config.d_ff,
         gnn_dim=config.gnn_dim,
+        dropout=0.0,
         verbose=config.verbose,
     )
+    if dropout_configs:
+        results += train_ensemble(
+            dropout_configs,
+            featurizer,
+            train,
+            val,
+            d_model=config.d_model,
+            n_heads=config.n_heads,
+            n_layers=config.n_layers,
+            d_ff=config.d_ff,
+            gnn_dim=config.gnn_dim,
+            dropout=0.1,
+            verbose=config.verbose,
+        )
     _save_ensemble(run_dir, results)
     conformal = fit_conformal(results, featurizer, val)
     predictions = ensemble_predict(results, featurizer, test)
@@ -235,7 +259,7 @@ def _gap_report(config: BenchmarkConfig, metrics: dict[str, Any], splits: dict[s
     ]
     baseline_rows.append(
         [
-            "GNN + graph-augmented transformer",
+            "GNN + transformer (2 plain + 2 dropout)",
             f"{metrics['rmse']:.3f}",
             f"{metrics['mae']:.3f}",
             f"{metrics['r2']:.3f}",
@@ -256,8 +280,8 @@ def _gap_report(config: BenchmarkConfig, metrics: dict[str, Any], splits: dict[s
 
 {_table(["model", "RMSE (eV)", "MAE (eV)", "R²"], baseline_rows)}
 
-The transformer improves substantially over composition-fraction ridge and kNN
-baselines. The RMSE is larger than the MAE because the experimental table
+The mixed ensemble improves substantially over composition-fraction ridge and
+kNN baselines. The RMSE is larger than the MAE because the experimental table
 contains a small number of high-gap outliers; the median error is more
 representative of typical performance.
 

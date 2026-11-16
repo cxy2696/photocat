@@ -179,7 +179,7 @@ def build_parser() -> argparse.ArgumentParser:
     bench = subparsers.add_parser("bench", help="run the real-data benchmarks")
     bench.add_argument("--dataset", choices=("gap", "her", "all"), default="all")
     bench.add_argument("--epochs", type=int, default=24)
-    bench.add_argument("--ensemble", type=int, default=2)
+    bench.add_argument("--ensemble", type=int, default=4)
     bench.add_argument("--seed", type=int, default=2025)
     bench.add_argument("--no-figures", action="store_true")
     bench.set_defaults(func=_bench)
