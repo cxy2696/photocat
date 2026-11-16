@@ -11,7 +11,7 @@ Implements the proposal's candidate-ranking stage:
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import Sequence
 
 import numpy as np
@@ -222,14 +222,3 @@ def screen_candidates(
     stage_pass["similarity_median"] = float(np.median(similarity[selected])) if selected else float("nan")
     stage_pass["similarity_mean"] = float(np.mean(similarity[selected])) if selected else float("nan")
     return candidates, stage_pass
-
-
-def novelty_of(candidate: Candidate, library: Sequence[Material], n_bits: int = DEFAULT_BITS) -> float:
-    """Recompute similarity for one candidate (used by tests/explainers)."""
-    query = composition_fingerprint(candidate.material, n_bits)[None, :]
-    library_fingerprints = np.stack([composition_fingerprint(m, n_bits) for m in library])
-    return float(max_similarity(query, library_fingerprints)[0][0])
-
-
-def config_dict(config: RankConfig) -> dict[str, object]:
-    return asdict(config)

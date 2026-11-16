@@ -52,15 +52,6 @@ def tabular_features(materials: Sequence[Material], featurizer: Featurizer) -> n
     return matrix
 
 
-def standardise(
-    train: np.ndarray, test: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    mean = train.mean(axis=0)
-    std = train.std(axis=0)
-    std[std < 1e-8] = 1.0
-    return (train - mean) / std, (test - mean) / std, mean, std
-
-
 def _fit_ridge(x: np.ndarray, y: np.ndarray, ridge: float) -> np.ndarray:
     """Ridge coefficients with an unpenalised intercept."""
     x_mean = x.mean(axis=0)

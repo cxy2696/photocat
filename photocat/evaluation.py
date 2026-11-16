@@ -21,9 +21,7 @@ from .data.synth import Material
 from .metrics import (
     bootstrap_ci,
     conformal_quantile,
-    mae,
     pearson,
-    r2,
     regression_metrics,
     rmse,
     spearman,
@@ -215,17 +213,3 @@ def _prediction_rows(
                 }
             )
     return rows
-
-
-def summarize_predictions(
-    materials: Sequence[Material],
-    prediction: EnsemblePrediction,
-) -> dict[str, float]:
-    """Small diagnostic block used by the report."""
-    truth = _true_targets(materials)
-    return {
-        "bandgap_mae": mae(truth[:, 0], prediction.eg),
-        "bandgap_r2": r2(truth[:, 0], prediction.eg),
-        "her_spearman": spearman(truth[:, 1], prediction.her),
-        "stability_mae": mae(truth[:, 2], prediction.stability),
-    }

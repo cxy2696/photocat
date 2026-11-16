@@ -9,9 +9,7 @@ the task is genuine relational completion rather than value regression.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Sequence
 
 import numpy as np
@@ -231,15 +229,4 @@ def train_link_predictor(
         examples=examples,
         n_train=len(train_idx),
         n_test=len(test_idx),
-    )
-
-
-def save_link_prediction(path: str | Path, result: LinkPredictionResult) -> None:
-    Path(path).write_text(
-        json.dumps(
-            {"metrics": result.metrics, "examples": result.examples},
-            indent=2,
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
     )
