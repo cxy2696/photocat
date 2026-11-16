@@ -22,6 +22,6 @@ python -m photocat demo --fast --mitigation oversample --out runs/fast_oversampl
 * 原因是训练集中 rutile / perovskite 占比高，均匀采样会让模型把“宽禁带氧化物”的先验带到所有晶族；
   逆频率重采样让 oxynitride / sulfide 之外的少数晶族获得更多梯度，元素层面的规律更可迁移。
 
-注意：这是 3,000 条材料、单种子的快速消融；更大规模的主结果（`runs/demo`）仍采用 `none`，
+注意：这是 3,000 条材料、2 个模型种子的快速消融；更大规模的主结果（`runs/demo`）仍采用 `none`，
 用于观察未缓解时的真实分布外缺口。若要追求 OOD 指标，建议把 `--mitigation oversample` 作为默认，
 并使用多个种子报告均值与方差。

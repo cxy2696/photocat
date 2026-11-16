@@ -355,7 +355,7 @@ def generate_report(run_dir: str | Path) -> Path:
         lines.append(_table(
             ["指标", "数值"],
             [
-                ["目标材料数（pool 的 1%）", int(summary.get("n_targets", 0))],
+                ["目标材料数（HER top 1%）", int(summary.get("n_targets", 0))],
                 ["初始标签", int(summary.get("initial_labels", 0))],
                 ["达到 50% recall 所需新标签（主动 / 随机）", f"{_fmt(summary.get('labels_to_50pct_active'), 0)} / {_fmt(random_50, 0)}"],
                 ["50% recall 的实验节省", savings("50pct")],
