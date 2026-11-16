@@ -7,6 +7,11 @@ Run after `python -m photocat demo`:
 from __future__ import annotations
 
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import sys
 
 from photocat.data.synth import load_materials
 from photocat.models.ensemble import ensemble_predict
