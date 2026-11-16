@@ -17,6 +17,7 @@ docs/source/paper.txt
 # External data: Matbench is MIT and committed; EES is downloaded locally.
 data/external/*
 !data/external/README.md
+!data/external/README_cn.md
 !data/external/SOURCES.json
 !data/external/matbench_expt_gap.json.gz
 

@@ -1,5 +1,7 @@
 # External data
 
+English · [中文](README_cn.md)
+
 The real benchmarks use two external sources. See `docs/DATA_en.md` for processing
 and `docs/REFERENCES_en.md` for citations.
 

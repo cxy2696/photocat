@@ -86,7 +86,7 @@ s_{ij} = \frac{q_i^\top k_j}{\sqrt{d_h}} + \beta_h \tilde A_{ij},
 
 - AdamW，cosine 衰减到初始学习率的 10%，梯度裁剪 5；
 - 早停看验证损失；合成场景按晶族可选逆频率加权或重采样；
-- 集成多个随机种子，均值作为预测，标准差作为不确定性。
+- 集成多个随机种子，均值作为预测，标准差作为不确定性；Matbench 使用 2 个普通模型 + 2 个 dropout=0.1 模型的混合集成。
 
 Matbench 实测：4,603 条、元素体系留出，2 个普通模型 + 2 个 dropout=0.1 模型的混合集成，RMSE 0.799 eV、MAE 0.437 eV。
 同数据上的 ridge/kNN 为 1.218/1.138 eV。详细协议见 `docs/RESULTS_cn.md`。
