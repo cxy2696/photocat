@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+
+# Generated artifacts
+data/*.csv
+data/*.sqlite
+data/*.json
+runs/
+docs/source/paper.txt
+.mplconfig/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Test cache
+.pytest_cache/

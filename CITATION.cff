@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this package, please cite the repository and the underlying proposal."
+title: "photocat: semantic KG + graph-augmented transformers for photocatalytic materials discovery"
+authors:
+  - family-names: Cui
+    given-names: Xinyi
+year: 2026
+license: MIT
+type: software
