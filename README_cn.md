@@ -28,6 +28,8 @@
 ![Matbench 带隙](docs/figures/bench_gap_parity.png)
 ![EES HER](docs/figures/bench_her_parity.png)
 
+![数据与模型流程](docs/figures/pipeline.svg)
+
 ## 安装与运行
 
 ```bash
@@ -68,6 +70,19 @@ TiO2 过程表上游没有声明再分发许可证，因此只在本地下载，
   工艺变量；仓库改用 RBF 核岭回归（`photocat/models/kernel.py`），按论文留出
   后 log R² 为 0.568。两个模型分开报告，是因为数据形态不同，而不是为了抬高
   某一个指标。
+
+### 可选 PyTorch 后端
+
+组成模型提供对应的 `torch.nn` 实现，层结构与 NumPy 版本一一对应；
+`load_from_numpy` 可以在两个版本之间复制权重，测试会在关闭 dropout 时检查
+两者输出一致。Matbench 上 PyTorch 后端的 RMSE 为 0.801 eV、MAE 0.448 eV、
+R² 0.694，处于 NumPy 版本（0.799 / 0.437 / 0.696）的正常波动范围内。
+PyTorch 是可选依赖，默认路径仍是 NumPy。
+
+```bash
+pip install -e ".[torch]"
+python -m photocat bench --dataset gap --backend torch --ensemble 4
+```
 
 ## 数据和引用
 
@@ -131,14 +146,15 @@ photocat/
 ## 开发
 
 ```bash
-python -m pytest -q              # 24 个测试
+python -m pytest -q              # 32 个测试（未安装 torch 时跳过 4 个 PyTorch 测试）
 python scripts/verify_provenance.py
 python -m photocat info
 ```
 
-代码以 NumPy 为主，训练不依赖 PyTorch。12,000 条合成场景在 Apple Silicon
-CPU 上约 5 分钟；4,603 条 Matbench、四个模型约 2–3 分钟。若要扩展到十万级材料，建议把
-`models/` 换成 PyTorch 实现，数据、KG 和评测代码可以保留。
+默认实现是 NumPy，同时提供可选的 PyTorch 后端。12,000 条合成场景在
+Apple Silicon CPU 上约 5 分钟；4,603 条 Matbench、四个模型约 2–3 分钟。
+若要扩展到十万级材料，可以从 PyTorch 路径或更大的自定义模型开始，数据、KG
+和评测代码保持不变。
 
 ## 许可
 

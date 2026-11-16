@@ -32,6 +32,8 @@ Results on the two public datasets:
 ![Matbench band gap](docs/figures/bench_gap_parity.png)
 ![EES HER](docs/figures/bench_her_parity.png)
 
+![Data and model flow](docs/figures/pipeline.svg)
+
 ## Install and run
 
 ```bash
@@ -74,6 +76,20 @@ source details to `data/external/SOURCES.json`.
   RBF kernel ridge regression instead (`photocat/models/kernel.py`), which
   reaches log R² 0.568 under paper-held-out cross-validation. The two models
   are reported separately because the data regimes differ.
+
+### Optional PyTorch backend
+
+The composition model also has a `torch.nn` implementation. Its layers mirror
+the NumPy model and `load_from_numpy` copies the weights between them; the test
+suite checks numerical equivalence with dropout disabled. On Matbench the
+PyTorch backend gives RMSE 0.801 eV / MAE 0.448 eV / R² 0.694, within run-to-run
+variation of the NumPy result (0.799 / 0.437 / 0.696). PyTorch is optional and
+the default path stays NumPy.
+
+```bash
+pip install -e ".[torch]"
+python -m photocat bench --dataset gap --backend torch --ensemble 4
+```
 
 ## Data and citations
 
@@ -143,16 +159,17 @@ photocat/
 ## Development
 
 ```bash
-python -m pytest -q              # 24 tests
+python -m pytest -q              # 32 tests (4 PyTorch tests are skipped if torch is absent)
 python scripts/verify_provenance.py
 python -m photocat info
 ```
 
-The implementation uses NumPy rather than PyTorch. A 12,000-record synthetic
-run takes about 5 minutes on an Apple Silicon CPU; the four-model Matbench run
-takes about 2–3 minutes. For 100k-scale datasets, replacing `models/` with
-PyTorch while keeping the data, KG and evaluation layers would be the sensible
-next step.
+The default implementation is NumPy; an optional PyTorch backend mirrors the
+composition model. A 12,000-record synthetic run takes about 5 minutes on an
+Apple Silicon CPU; the four-model Matbench run takes about 2–3 minutes. For
+100k-scale datasets, the PyTorch path (or a larger custom model) is the
+sensible starting point, while the data, KG and evaluation layers stay the
+same.
 
 ## Licence
 

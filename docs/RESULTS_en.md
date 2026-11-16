@@ -39,6 +39,9 @@ plain models and two models using dropout 0.1.
 
 ![Matbench band-gap parity](figures/bench_gap_parity.png)
 
+The optional PyTorch backend (`--backend torch`, four models, same split) gives
+RMSE 0.801 eV / MAE 0.448 eV / R² 0.694, consistent with the NumPy result.
+
 **What this supports.** On unseen element systems, the composition Transformer
 has clearly lower error than composition ridge and kNN. The element and
 stoichiometry representation carries transferable information.

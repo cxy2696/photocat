@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "photocat"
-version = "0.3.0"
+version = "0.4.0"
 description = "Composition band-gap prediction, small-table HER regression, and a semantic KG toolkit for photocatalytic materials"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,6 +22,7 @@ dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
 viz = ["matplotlib>=3.7"]
+torch = ["torch>=2.2"]
 dev = ["pytest>=7", "matplotlib>=3.7", "openpyxl>=3.1"]
 
 [project.scripts]

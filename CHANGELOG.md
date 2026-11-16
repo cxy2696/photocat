@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.0] - 2026-11-16
+
+### Added
+
+- Optional `torch.nn` implementation of the composition model, with a
+  `load_from_numpy` weight-transfer method and parity tests (logits and
+  attention maps).
+- `--backend torch` for the Matbench benchmark, with `--device` and `--out`
+  options; PyTorch backend result is consistent with NumPy.
+- Derivation tests for masked MSE, kernel-ridge closed form, finite-sample
+  conformal quantiles and target masking.
+- Workflow figure in all README variants.
+
+### Changed
+
+- English is the default README; `README_en.md` / `README_cn.md` and
+  `docs/*_en.md` / `docs/*_cn.md` provide explicit switching.
+- Math delimiters converted to GitHub-rendered `$`/`$$`.
+- Removed the unused GNN pooled vector and duplicated mixed-ensemble code.
+- Matbench mixed ensemble remains the reported default: RMSE 0.799 eV,
+  MAE 0.437 eV; the optional PyTorch backend gives 0.801 / 0.448.
+
 ## [0.3.0] - 2026-11-16
 
 ### Added

@@ -14,7 +14,6 @@ from ..data.dataset import NODE_FEATURES
 class GNNOutput:
     node_embeddings: Tensor  # (B, N, H)
     material: Tensor  # (B, H)
-    pooled: Tensor  # (B, H)
 
 
 def _xavier(rng: np.random.Generator, fan_in: int, fan_out: int) -> Tensor:
@@ -26,7 +25,7 @@ class KGSubgraphGNN:
     """Two-layer GCN over ``material -> element`` and element co-occurrence edges.
 
     The GNN is trained jointly with the transformer.  Its node embeddings are
-    injected into the corresponding element tokens, and its pooled material
+    injected into the corresponding element tokens, and the material-node
     embedding initialises the ``[CLS]`` token.  This is the "KG-derived node
     embedding" path in the proposal's Figure 1.
     """
@@ -90,6 +89,4 @@ class KGSubgraphGNN:
         material_mask = np.zeros((mask.shape[0], mask.shape[1], 1), dtype=np.float64)
         material_mask[:, 0, 0] = 1.0
         material = (hidden * Tensor(material_mask)).sum(axis=1)  # (B, H)
-        counts = mask.sum(axis=1, keepdims=True)
-        pooled = (hidden * mask_3d).sum(axis=1) / np.maximum(counts, 1.0)
-        return GNNOutput(node_embeddings=hidden, material=material, pooled=pooled)
+        return GNNOutput(node_embeddings=hidden, material=material)

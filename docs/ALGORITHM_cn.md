@@ -31,17 +31,17 @@ pymatgen 2026.10.24 的周期表数据生成，缺失的 d 电子数和丰度用
 
 - 节点：1 个材料节点 + 最多 6 个元素节点；
 - 边：`material—hasElement—element`（权重为化学计量分数），元素共现边
-  （权重 \(2f_i f_j\)），自环；
-- 邻接按行归一化：\(\hat A = D^{-1}(A+I)\)。
+  （权重 $2f_i f_j$），自环；
+- 邻接按行归一化：$\hat A = D^{-1}(A+I)$。
 
 节点特征：元素节点使用 9 个元素性质 + `is_material` + 角色 one-hot，共 14 维；
 材料节点使用 9 个组成描述符。图的消息传递为
 
-\[
+$$
 H^{(\ell+1)} = \mathrm{ReLU}\!\left(\hat A H^{(\ell)} W^{(\ell)} + b^{(\ell)}\right),
-\]
+$$
 
-材料向量取材料节点，图池化向量取节点均值。
+材料向量取材料节点。
 
 ### 1.3 Token 序列
 
@@ -57,26 +57,26 @@ H^{(\ell+1)} = \mathrm{ReLU}\!\left(\hat A H^{(\ell)} W^{(\ell)} + b^{(\ell)}\ri
 
 ### 1.4 图偏置注意力
 
-\[
+$$
 s_{ij} = \frac{q_i^\top k_j}{\sqrt{d_h}} + \beta_h \tilde A_{ij},
 \qquad
 \alpha_{ij} = \mathrm{softmax}_{j\in\text{valid}}(s_{ij}),
-\]
+$$
 
-\(\tilde A_{ij}\) 是 token 对应节点间的归一化邻接权重，\(\beta_h\) 是每个头学习的
+$\tilde A_{ij}$ 是 token 对应节点间的归一化邻接权重，$\beta_h$ 是每个头学习的
 标量。padding key 被 mask。两层 pre-LN 残差块之后，CLS 向量与均值池化向量拼接，
-经过一个共享 MLP，分别输出带隙、\(\log(1+HER)\)、稳定性 logit。
+经过一个共享 MLP，分别输出带隙、$\log(1+HER)$、稳定性 logit。
 
 ### 1.5 掩码多任务损失
 
-真实数据往往只有一个目标。设 \(m_{i,t}\in\{0,1\}\) 表示第 \(i\) 个样本的第
-\(t\) 个目标是否存在：
+真实数据往往只有一个目标。设 $m_{i,t}\in\{0,1\}$ 表示第 $i$ 个样本的第
+$t$ 个目标是否存在：
 
-\[
+$$
 \mathcal L = \sum_t \lambda_t
 \frac{\sum_i m_{i,t} w_i (\hat y_{i,t}-y_{i,t})^2}
      {\sum_i m_{i,t} w_i},
-\]
+$$
 
 稳定性项用带权 BCE。某个任务在当前 batch 没有标签时直接跳过。目标标准化使用
 `nanmean`/`nanstd`；全缺失的目标列在推理时返回 NaN，而不是编造一个数。
@@ -91,6 +91,21 @@ s_{ij} = \frac{q_i^\top k_j}{\sqrt{d_h}} + \beta_h \tilde A_{ij},
 Matbench 实测：4,603 条、元素体系留出，2 个普通模型 + 2 个 dropout=0.1 模型的混合集成，RMSE 0.799 eV、MAE 0.437 eV。
 同数据上的 ridge/kNN 为 1.218/1.138 eV。详细协议见 `docs/RESULTS_cn.md`。
 
+### 1.6 Dropout 与 PyTorch 实现
+
+Dropout 施加在初始 token 嵌入之后，以及 FFN 输出加回残差之前：
+
+$$
+\tilde h = \frac{m\odot h}{1-p},\qquad m\sim\mathrm{Bernoulli}(1-p),
+$$
+
+dropout 集成成员取 $p=0.1$，普通成员取 $p=0$；推理时关闭。
+
+`photocat/models/torch_transformer.py` 用 `torch.nn` 实现同一套图、注意力、
+LayerNorm 和输出头。`load_from_numpy` 把 NumPy 参数复制到 Torch 模块；
+`tests/test_torch.py` 在关闭 dropout 时检查两者的 logits 与 attention 是否
+一致。这是等价的实现检查，不是一个无法对照的第二套模型。
+
 ---
 
 ## 2. 小表模型：RBF 核岭回归
@@ -98,16 +113,16 @@ Matbench 实测：4,603 条、元素体系留出，2 个普通模型 + 2 个 dro
 EES 表只有 552 条完整记录、34 篇论文。组成 Transformer 在这类数据上会记住
 工艺组合；因此 HER 基准使用核岭回归：
 
-\[
+$$
 f(x) = \sum_{i=1}^{n} \alpha_i
 \exp\!\left(-\gamma \|x-x_i\|^2\right) + \bar y,
 \qquad
 (K+\lambda I)\alpha = y-\bar y.
-\]
+$$
 
 特征为助催化剂 one-hot、助催化剂负载、比表面积、带隙、牺牲剂 one-hot 与浓度、
-光强、合成路线 one-hot。目标为 \(\log_{10}(1+\text{Rate})\)。所有特征先标准化。
-\(\gamma=0.03\)、\(\lambda=0.1\) 固定，不做测试折调参。
+光强、合成路线 one-hot。目标为 $\log_{10}(1+\text{Rate})$。所有特征先标准化。
+$\gamma=0.03$、$\lambda=0.1$ 固定，不做测试折调参。
 
 评估用 leave-papers-out 5 折：同一篇论文的所有记录只出现在一个折里。结果
 R² 0.568、MAE 0.289、Spearman 0.698；线性 ridge 为 0.470、0.324、0.586。
@@ -125,11 +140,11 @@ R² 0.568、MAE 0.289、Spearman 0.698；线性 ridge 为 0.470、0.324、0.586�
 
 推理规则包括：
 
-- `inferred:Candidate`：\(1.23\le E_g\le 3.0\)、\(HER\ge 6\)、稳定性 \(\ge0.55\)；
-- `inferred:EarthAbundant`：组成元素地壳丰度均 \(\ge10\) ppm；
-- `inferred:Novel`：与训练库最大 Tanimoto \(<0.8\)；
+- `inferred:Candidate`：$1.23\le E_g\le 3.0$、$HER\ge 6$、稳定性 $\ge0.55$；
+- `inferred:EarthAbundant`：组成元素地壳丰度均 $\ge10$ ppm；
+- `inferred:Novel`：与训练库最大 Tanimoto $<0.8$；
 - `inferred:HeterojunctionWith`：共享元素且能带交错
-  \((E_{CB}^a<E_{CB}^b<E_{VB}^a<E_{VB}^b)\) 或对称情形。
+  $(E_{CB}^a<E_{CB}^b<E_{VB}^a<E_{VB}^b)$ 或对称情形。
 
 规则结果带 `source` 字段，可回到具体三元组。抽取器只在合成语料上做单元测试，
 不声称达到 SciBERT 的文献抽取水平。
@@ -140,14 +155,14 @@ R² 0.568、MAE 0.289、Spearman 0.698；线性 ridge 为 0.470、0.324、0.586�
 
 硬约束：带隙窗口、HER、稳定性、Tanimoto 新颖性。综合分数为
 
-\[
+$$
 0.42\,\tilde z(\log(1+HER))
 +0.18\,e^{-\frac12\left(\frac{E_g-2.0}{0.55}\right)^2}
 +0.14\,P_{stable}
 +0.14\,\text{novelty}
 +0.07\,\text{certainty}
 +0.05\,\text{abundance}.
-\]
+$$
 
 shortlist 使用分数排序、Tanimoto 阈值 0.92、同 label 去重，并给出 Pareto 前沿。
 这些权重是场景设置，不是从真实实验优化出来的。
@@ -156,11 +171,11 @@ shortlist 使用分数排序、Tanimoto 阈值 0.92、同 label 去重，并给�
 
 ## 5. 不确定性与主动学习
 
-深度集成给出 \(\mu(x)\)、\(\sigma(x)\)；验证集上校准 split-conformal 区间：
+深度集成给出 $\mu(x)$、$\sigma(x)$；验证集上校准 split-conformal 区间：
 
-\[
+$$
 q = \mathrm{Quantile}_{\lceil(n+1)(1-\alpha)\rceil/n}(|y_i-\hat y_i|).
-\]
+$$
 
 Matbench 90% 区间半宽 2.221 eV、覆盖率 0.880。区间被高带隙离群点拉宽，说明
 单点带隙预测不应被过度解读。
@@ -190,3 +205,19 @@ Matbench 90% 区间半宽 2.221 eV、覆盖率 0.880。区间被高带隙离群�
 - EES 表 TiO2 比例极高，不能外推到其他材料家族；Rate 单位未统一。
 - 仓库没有使用 Materials Project、Open Catalyst 或 SciBERT 的原始数据，相关
   来源只在提案讨论中出现，不能算作本仓库的验证数据。
+
+
+## 8. 被测试的不变量
+
+测试不只检查形状，也对应上面的公式：
+
+| 不变量 | 测试 |
+| --- | --- |
+| 掩码 MSE 等于加权平均公式，梯度正确 | `tests/test_derivations.py` |
+| RBF 核岭回归等于闭式解 | `tests/test_derivations.py` |
+| 共形分位数采用 `ceil((n+1)(1-alpha))/n` 的有限样本修正 | `tests/test_derivations.py` |
+| 缺失目标保持 NaN，并在损失中被掩码 | `tests/test_derivations.py`、`tests/test_external.py` |
+| attention 每行和为 1，padding key 注意力为 0 | `tests/test_models.py`、`tests/test_torch.py` |
+| 权重复制后 PyTorch 与 NumPy 输出一致 | `tests/test_torch.py` |
+| 自动微分梯度与有限差分一致 | `tests/test_autograd.py` |
+| 图邻接行归一化，padding token 没有图偏置 | `tests/test_data.py` |

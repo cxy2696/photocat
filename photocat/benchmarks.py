@@ -33,9 +33,9 @@ from .data.external import (
     split_summary,
 )
 from .data.synth import Material
-from .evaluation import fit_conformal
 from .metrics import (
     bootstrap_ci,
+    conformal_quantile,
     mae,
     regression_metrics,
     rmse,
@@ -59,6 +59,8 @@ class BenchmarkConfig:
     n_layers: int = 2
     d_ff: int = 128
     gnn_dim: int = 32
+    backend: str = "numpy"  # numpy | torch
+    torch_device: str = "cpu"
     figures: bool = True
     verbose: bool = True
 
@@ -123,6 +125,48 @@ def _save_ensemble(run_dir: Path, results: Sequence[Any]) -> None:
     _write_json(run_dir / "ensemble.json", meta)
 
 
+def _save_torch_ensemble(run_dir: Path, results: Sequence[Any]) -> None:
+    meta = {"framework": "torch", "models": []}
+    for index, result in enumerate(results):
+        path = f"model_{index}.pt"
+        result.model.save(str(run_dir / path))
+        meta["models"].append(
+            {
+                "path": path,
+                "seed": result.config.seed,
+                "model_config": result.model.config(),
+                "scaler": result.scaler.to_dict(),
+                "train_config": asdict(result.config),
+            }
+        )
+    _write_json(run_dir / "ensemble.json", meta)
+
+
+def _fit_mixed_ensemble(
+    train_fn,
+    plain_configs: Sequence[TrainConfig],
+    dropout_configs: Sequence[TrainConfig],
+    featurizer: Featurizer,
+    train: Sequence[Material],
+    val: Sequence[Material],
+    kwargs: dict[str, Any],
+):
+    results = train_fn(plain_configs, featurizer, train, val, dropout=0.0, **kwargs)
+    if dropout_configs:
+        results += train_fn(dropout_configs, featurizer, train, val, dropout=0.1, **kwargs)
+    return results
+
+
+def _gap_predict(config: BenchmarkConfig, results: Sequence[Any], featurizer: Featurizer, materials: Sequence[Material]):
+    if config.backend == "torch":
+        from .training_torch import predict_torch_materials
+
+        return predict_torch_materials(
+            results, featurizer, materials, device=config.torch_device
+        )
+    return ensemble_predict(results, featurizer, materials)
+
+
 def run_gap_benchmark(config: BenchmarkConfig | None = None) -> dict[str, Any]:
     config = config or BenchmarkConfig()
     run_dir = Path(config.out_dir)
@@ -164,43 +208,48 @@ def run_gap_benchmark(config: BenchmarkConfig | None = None) -> dict[str, Any]:
         TrainConfig(seed=config.seed + 100 + offset, **common)
         for offset in range(n_dropout)
     ]
-    results = train_ensemble(
-        plain_configs,
-        featurizer,
-        train,
-        val,
-        d_model=config.d_model,
-        n_heads=config.n_heads,
-        n_layers=config.n_layers,
-        d_ff=config.d_ff,
-        gnn_dim=config.gnn_dim,
-        dropout=0.0,
-        verbose=config.verbose,
+    if config.backend == "torch":
+        from .training_torch import train_torch_ensemble
+
+        train_fn = train_torch_ensemble
+        kwargs = {
+            "d_model": config.d_model,
+            "n_heads": config.n_heads,
+            "n_layers": config.n_layers,
+            "d_ff": config.d_ff,
+            "gnn_dim": config.gnn_dim,
+            "device": config.torch_device,
+            "verbose": config.verbose,
+        }
+    elif config.backend == "numpy":
+        train_fn = train_ensemble
+        kwargs = {
+            "d_model": config.d_model,
+            "n_heads": config.n_heads,
+            "n_layers": config.n_layers,
+            "d_ff": config.d_ff,
+            "gnn_dim": config.gnn_dim,
+            "verbose": config.verbose,
+        }
+    else:
+        raise ValueError(f"unknown backend {config.backend!r}")
+
+    results = _fit_mixed_ensemble(
+        train_fn, plain_configs, dropout_configs, featurizer, train, val, kwargs
     )
-    if dropout_configs:
-        results += train_ensemble(
-            dropout_configs,
-            featurizer,
-            train,
-            val,
-            d_model=config.d_model,
-            n_heads=config.n_heads,
-            n_layers=config.n_layers,
-            d_ff=config.d_ff,
-            gnn_dim=config.gnn_dim,
-            dropout=0.1,
-            verbose=config.verbose,
-        )
-    _save_ensemble(run_dir, results)
-    conformal = fit_conformal(results, featurizer, val)
-    predictions = ensemble_predict(results, featurizer, test)
+    if config.backend == "torch":
+        _save_torch_ensemble(run_dir, results)
+    else:
+        _save_ensemble(run_dir, results)
+    predictions = _gap_predict(config, results, featurizer, test)
+    val_predictions = _gap_predict(config, results, featurizer, val)
     truth = np.asarray([material.eg for material in test])
+    val_truth = np.asarray([material.eg for material in val])
     metrics = regression_metrics(truth, predictions.eg)
     metrics["rmse_ci90"] = bootstrap_ci(truth, predictions.eg, rmse, seed=3)
     metrics["mae_ci90"] = bootstrap_ci(truth, predictions.eg, mae, seed=4)
-    coverage = float(
-        np.mean(np.abs(truth - predictions.eg) <= conformal["bandgap_quantile"])
-    )
+    quantile = conformal_quantile(np.abs(val_truth - val_predictions.eg), 0.9)
+    coverage = float(np.mean(np.abs(truth - predictions.eg) <= quantile))
 
     baselines: dict[str, Any] = {}
     for name, model in (
@@ -213,7 +262,8 @@ def run_gap_benchmark(config: BenchmarkConfig | None = None) -> dict[str, Any]:
         baselines[name] = regression_metrics(truth, baseline_prediction.eg)
     metrics["baselines"] = baselines
     metrics["conformal_coverage_90"] = coverage
-    metrics["conformal_width_eV"] = 2.0 * conformal["bandgap_quantile"]
+    metrics["conformal_width_eV"] = 2.0 * quantile
+    metrics["backend"] = config.backend
     metrics["n_train"] = len(train)
     metrics["n_val"] = len(val)
     metrics["n_test"] = len(test)
@@ -259,7 +309,7 @@ def _gap_report(config: BenchmarkConfig, metrics: dict[str, Any], splits: dict[s
     ]
     baseline_rows.append(
         [
-            "GNN + transformer (2 plain + 2 dropout)",
+            f"{config.backend.capitalize()} GNN + transformer (2 plain + 2 dropout)",
             f"{metrics['rmse']:.3f}",
             f"{metrics['mae']:.3f}",
             f"{metrics['r2']:.3f}",
@@ -277,6 +327,8 @@ def _gap_report(config: BenchmarkConfig, metrics: dict[str, Any], splits: dict[s
 - Input: composition only. No crystal structure, temperature or synthesis data.
 
 ## Results
+
+Backend: `{config.backend}`.
 
 {_table(["model", "RMSE (eV)", "MAE (eV)", "R²"], baseline_rows)}
 

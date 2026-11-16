@@ -35,19 +35,18 @@ Each material is a small graph:
 
 - one material node and up to six element nodes;
 - `material—hasElement—element` edges weighted by stoichiometric fraction,
-  element co-occurrence edges weighted by \(2f_i f_j\), and self-loops;
-- row-normalised adjacency \(\hat A = D^{-1}(A+I)\).
+  element co-occurrence edges weighted by $2f_i f_j$, and self-loops;
+- row-normalised adjacency $\hat A = D^{-1}(A+I)$.
 
 Node features are 9 element properties plus an `is_material` flag and a
 role one-hot (14 dimensions) for element nodes; the material node uses 9
 composition descriptors. Message passing is
 
-\[
+$$
 H^{(\ell+1)} = \mathrm{ReLU}\!\left(\hat A H^{(\ell)} W^{(\ell)} + b^{(\ell)}\right).
-\]
+$$
 
-The material vector is the material-node row; the graph vector is the mean over
-nodes.
+The material vector is the material-node row.
 
 ### 1.3 Token sequence
 
@@ -65,28 +64,28 @@ Missing context fields map to an unknown slot and do not crash the model.
 
 ### 1.4 Graph-biased attention
 
-\[
+$$
 s_{ij} = \frac{q_i^\top k_j}{\sqrt{d_h}} + \beta_h \tilde A_{ij},
 \qquad
 \alpha_{ij} = \mathrm{softmax}_{j\in\text{valid}}(s_{ij}),
-\]
+$$
 
-where \(\tilde A_{ij}\) is the normalised adjacency between the tokens' nodes
-and \(\beta_h\) is a learned scalar per head. Padding keys are masked. After two
+where $\tilde A_{ij}$ is the normalised adjacency between the tokens' nodes
+and $\beta_h$ is a learned scalar per head. Padding keys are masked. After two
 pre-LN residual blocks, the CLS vector and mean-pooled vector are concatenated
 and passed through a shared MLP to three outputs: band gap,
-\(\log(1+HER)\), and a stability logit.
+$\log(1+HER)$, and a stability logit.
 
 ### 1.5 Masked multi-task loss
 
-Real datasets usually contain only one target. Let \(m_{i,t}\in\{0,1\}\)
-indicate whether target \(t\) exists for item \(i\):
+Real datasets usually contain only one target. Let $m_{i,t}\in\{0,1\}$
+indicate whether target $t$ exists for item $i$:
 
-\[
+$$
 \mathcal L = \sum_t \lambda_t
 \frac{\sum_i m_{i,t} w_i (\hat y_{i,t}-y_{i,t})^2}
      {\sum_i m_{i,t} w_i},
-\]
+$$
 
 with a weighted BCE for stability. A task with no labels in the current batch
 is skipped. Standardisation uses `nanmean`/`nanstd`; a target column with no
@@ -109,6 +108,25 @@ Matbench result: 4,603 records, element-system holdout, RMSE 0.799 eV,
 MAE 0.437 eV. Ridge and kNN baselines on the same split are 1.218 and
 1.138 eV. See `docs/RESULTS_en.md`.
 
+### 1.7 Dropout and the PyTorch implementation
+
+Dropout is applied after the initial token embedding and to the FFN output
+before its residual add:
+
+$$
+\tilde h = \frac{m\odot h}{1-p},\qquad m\sim\mathrm{Bernoulli}(1-p),
+$$
+
+with $p=0.1$ for the dropout ensemble members and $p=0$ for the plain
+members. At inference dropout is disabled.
+
+`photocat/models/torch_transformer.py` implements the same graph, attention,
+layer-normalisation and head equations in `torch.nn`. `load_from_numpy` copies
+the NumPy parameters into the Torch module; `tests/test_torch.py` checks that
+both implementations produce the same logits and attention maps after the copy
+when dropout is disabled. This is a direct equivalence check, not a separate
+model with an unverified architecture.
+
 ---
 
 ## 2. Small-table model: RBF kernel ridge
@@ -117,17 +135,17 @@ The EES table has only 552 complete records from 34 papers. The composition
 Transformer overfits the process variables at this size, so the HER benchmark
 uses kernel ridge regression:
 
-\[
+$$
 f(x) = \sum_{i=1}^{n} \alpha_i
 \exp\!\left(-\gamma \|x-x_i\|^2\right) + \bar y,
 \qquad
 (K+\lambda I)\alpha = y-\bar y.
-\]
+$$
 
 Features are cocatalyst one-hot, cocatalyst loading, surface area, band gap,
 sacrificial-agent one-hot and concentration, light intensity, and synthesis
-route one-hot. The target is \(\log_{10}(1+\text{Rate})\). Features are
-standardised. \(\gamma=0.03\) and \(\lambda=0.1\) are fixed and not tuned on the
+route one-hot. The target is $\log_{10}(1+\text{Rate})$. Features are
+standardised. $\gamma=0.03$ and $\lambda=0.1$ are fixed and not tuned on the
 test folds.
 
 Evaluation uses leave-papers-out 5-fold cross-validation: all records from one
@@ -149,11 +167,11 @@ as a real knowledge base.
 
 Rules include:
 
-- `inferred:Candidate`: \(1.23\le E_g\le 3.0\), \(HER\ge 6\), stability \(\ge0.55\);
+- `inferred:Candidate`: $1.23\le E_g\le 3.0$, $HER\ge 6$, stability $\ge0.55$;
 - `inferred:EarthAbundant`: all constituent elements at least 10 ppm;
-- `inferred:Novel`: maximum Tanimoto similarity to the training library \(<0.8\);
+- `inferred:Novel`: maximum Tanimoto similarity to the training library $<0.8$;
 - `inferred:HeterojunctionWith`: shared element and staggered band alignment
-  \((E_{CB}^a<E_{CB}^b<E_{VB}^a<E_{VB}^b)\) or the symmetric case.
+  $(E_{CB}^a<E_{CB}^b<E_{VB}^a<E_{VB}^b)$ or the symmetric case.
 
 Inferred edges carry a `source` field and can be traced to supporting triples.
 The extractor is tested only on the synthetic corpus and makes no claim to
@@ -166,14 +184,14 @@ match SciBERT on real literature.
 Hard constraints are the band-gap window, HER, stability and Tanimoto novelty.
 The score is
 
-\[
+$$
 0.42\,\tilde z(\log(1+HER))
 +0.18\,e^{-\frac12\left(\frac{E_g-2.0}{0.55}\right)^2}
 +0.14\,P_{stable}
 +0.14\,\text{novelty}
 +0.07\,\text{certainty}
 +0.05\,\text{abundance}.
-\]
+$$
 
 The shortlist uses score ordering, a Tanimoto threshold of 0.92, duplicate-label
 removal and a Pareto front. These weights are scenario settings, not values
@@ -183,12 +201,12 @@ optimised on experiments.
 
 ## 5. Uncertainty and active learning
 
-The deep ensemble gives \(\mu(x)\) and \(\sigma(x)\). Split-conformal intervals
+The deep ensemble gives $\mu(x)$ and $\sigma(x)$. Split-conformal intervals
 are calibrated on the validation set:
 
-\[
+$$
 q = \mathrm{Quantile}_{\lceil(n+1)(1-\alpha)\rceil/n}(|y_i-\hat y_i|).
-\]
+$$
 
 For Matbench, the 90% interval half-width is 2.182 eV with coverage 0.894. The
 wide interval is driven by high-gap outliers and is a warning against
@@ -225,3 +243,19 @@ Crossref/arXiv and verifies file hashes.
 - The repository does not use raw Materials Project, Open Catalyst or SciBERT
   data. Those sources appear only in the proposal discussion and are not
   validation data for this package.
+
+
+## 8. Checked invariants
+
+The tests correspond to the equations above rather than only checking shapes:
+
+| Invariant | Test |
+| --- | --- |
+| masked MSE equals the weighted average formula and its gradient | `tests/test_derivations.py` |
+| RBF kernel ridge equals the closed-form solve | `tests/test_derivations.py` |
+| finite-sample conformal quantile uses `ceil((n+1)(1-alpha))/n` | `tests/test_derivations.py` |
+| unobserved targets stay NaN and are masked in the loss | `tests/test_derivations.py`, `tests/test_external.py` |
+| attention rows sum to one and padding keys receive zero attention | `tests/test_models.py`, `tests/test_torch.py` |
+| PyTorch and NumPy outputs match after weight transfer | `tests/test_torch.py` |
+| autograd gradients match finite differences | `tests/test_autograd.py` |
+| graph adjacency rows are normalised and padding tokens carry no bias | `tests/test_data.py` |

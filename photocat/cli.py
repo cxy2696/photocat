@@ -103,16 +103,25 @@ def _bench(args: argparse.Namespace) -> int:
         epochs=args.epochs,
         ensemble_size=args.ensemble,
         figures=not args.no_figures,
+        backend=args.backend,
+        torch_device=args.device,
         verbose=True,
     )
     results = {}
+    base_out = args.out
+    if args.dataset == "all" and base_out:
+        gap_out = str(Path(base_out) / "gap")
+        her_out = str(Path(base_out) / "her")
+    else:
+        gap_out = base_out or "runs/bench_gap"
+        her_out = base_out or "runs/bench_her"
     if args.dataset in ("gap", "all"):
         results["gap"] = run_gap_benchmark(
-            BenchmarkConfig(**{**config.to_dict(), "out_dir": "runs/bench_gap"})
+            BenchmarkConfig(**{**config.to_dict(), "out_dir": gap_out})
         )
     if args.dataset in ("her", "all"):
         results["her"] = run_her_benchmark(
-            BenchmarkConfig(**{**config.to_dict(), "out_dir": "runs/bench_her"})
+            BenchmarkConfig(**{**config.to_dict(), "out_dir": her_out})
         )
     print(json.dumps(results, indent=2, ensure_ascii=False))
     return 0
@@ -181,6 +190,9 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--epochs", type=int, default=24)
     bench.add_argument("--ensemble", type=int, default=4)
     bench.add_argument("--seed", type=int, default=2025)
+    bench.add_argument("--backend", choices=("numpy", "torch"), default="numpy")
+    bench.add_argument("--device", default="cpu")
+    bench.add_argument("--out", default=None, help="output directory (default: runs/bench_gap, runs/bench_her)")
     bench.add_argument("--no-figures", action="store_true")
     bench.set_defaults(func=_bench)
 

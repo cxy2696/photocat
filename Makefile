@@ -1,4 +1,4 @@
-.PHONY: install test demo fast bench fetch verify clean
+.PHONY: install test demo fast bench torch fetch verify clean
 
 install:
 	python3 -m pip install -e ".[dev]"
@@ -14,6 +14,9 @@ fast:
 
 bench:
 	python3 -m photocat bench --dataset all
+
+torch:
+	python3 -m photocat bench --dataset gap --backend torch --ensemble 4
 
 fetch:
 	python3 scripts/fetch_data.py

@@ -36,6 +36,9 @@ python -m photocat bench --dataset all --epochs 24 --ensemble 4 --seed 2025
 
 ![Matbench 带隙 parity](figures/bench_gap_parity.png)
 
+可选 PyTorch 后端（`--backend torch`，四个模型、同一划分）得到 RMSE 0.801 eV、
+MAE 0.448 eV、R² 0.694，与 NumPy 结果一致。
+
 **能说明什么**：在完全未见的元素体系上，组成 Transformer 的误差显著低于组成
 特征 ridge 和 kNN，说明元素/计量表示确实提供了可迁移信息。
 

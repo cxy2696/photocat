@@ -21,6 +21,8 @@ synthetic scenario; the results below come from public experimental data.
 ![Matbench band gap](docs/figures/bench_gap_parity.png)
 ![EES HER](docs/figures/bench_her_parity.png)
 
+![Data and model flow](docs/figures/pipeline.svg)
+
 ## Quick start
 
 ```bash
@@ -33,6 +35,21 @@ python -m photocat bench --dataset all
 python -m photocat demo --fast --out runs/scenario
 python -m pytest -q
 ```
+
+## Optional PyTorch backend
+
+The composition model has a `torch.nn` implementation with the same layers and
+a NumPy→PyTorch weight-transfer method. PyTorch is optional; the default path
+remains NumPy so the base install stays small.
+
+```bash
+pip install -e ".[torch]"
+python -m photocat bench --dataset gap --backend torch --ensemble 4
+```
+
+The test suite checks that both backends produce the same output after weight
+transfer (when dropout is disabled). See `docs/ALGORITHM_en.md` for the
+architecture mapping.
 
 ## Documentation
 
