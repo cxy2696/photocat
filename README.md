@@ -44,7 +44,7 @@ remains NumPy so the base install stays small.
 
 ```bash
 pip install -e ".[torch]"
-python -m photocat bench --dataset gap --backend torch --ensemble 4
+python -m photocat bench --dataset gap --backend torch --ensemble 4 --out runs/bench_gap_torch
 ```
 
 The test suite checks that both backends produce the same output after weight

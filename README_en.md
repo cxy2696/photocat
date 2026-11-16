@@ -88,7 +88,7 @@ the default path stays NumPy.
 
 ```bash
 pip install -e ".[torch]"
-python -m photocat bench --dataset gap --backend torch --ensemble 4
+python -m photocat bench --dataset gap --backend torch --ensemble 4 --out runs/bench_gap_torch
 ```
 
 ## Data and citations

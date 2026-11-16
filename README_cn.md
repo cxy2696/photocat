@@ -81,7 +81,7 @@ PyTorch 是可选依赖，默认路径仍是 NumPy。
 
 ```bash
 pip install -e ".[torch]"
-python -m photocat bench --dataset gap --backend torch --ensemble 4
+python -m photocat bench --dataset gap --backend torch --ensemble 4 --out runs/bench_gap_torch
 ```
 
 ## 数据和引用
